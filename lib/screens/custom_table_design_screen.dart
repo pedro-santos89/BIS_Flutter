@@ -225,6 +225,11 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                                 DropdownMenuItem(
                                     value: 'BOOLEAN',
                                     child: Text(l.tr('typeYesNo'))),
+                                DropdownMenuItem(
+                                    value: 'DATE', child: Text(l.tr('typeDate'))),
+                                DropdownMenuItem(
+                                    value: 'DATETIME',
+                                    child: Text(l.tr('typeDateHour'))),
                               ],
                               onChanged: (v) {
                                 setState(() => col.type = v ?? 'TEXT');

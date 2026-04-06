@@ -240,8 +240,9 @@ class CustomColumnDef {
   /// Human-readable column name.
   final String columnName;
 
-  /// Data type of the column. One of: 'TEXT', 'INTEGER', 'REAL', 'BOOLEAN'.
+  /// Data type of the column. One of: 'TEXT', 'INTEGER', 'REAL', 'BOOLEAN', 'DATE', 'DATETIME'.
   /// BOOLEAN is stored as INTEGER (0/1) in SQLite.
+  /// DATE and DATETIME are stored as TEXT (ISO 8601) in SQLite.
   final String columnType;
 
   /// Display order of this column (0-based).
@@ -311,6 +312,10 @@ class CustomColumnDef {
         return 'REAL';
       case 'BOOLEAN':
         return 'INTEGER';
+      case 'DATE':
+        return 'TEXT';
+      case 'DATETIME':
+        return 'TEXT';
       default:
         return 'TEXT';
     }

@@ -114,6 +114,14 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     if (col.columnType == 'BOOLEAN') {
       return (value == 1 || value == true) ? 'Yes' : 'No';
     }
+    if (col.columnType == 'DATE') {
+      final dt = DateTime.tryParse(value.toString());
+      if (dt != null) return DateFormat('dd-MM-yyyy').format(dt);
+    }
+    if (col.columnType == 'DATETIME') {
+      final dt = DateTime.tryParse(value.toString());
+      if (dt != null) return DateFormat('dd-MM-yyyy HH:mm').format(dt);
+    }
     return value.toString();
   }
 
@@ -167,12 +175,16 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
       Map<String, dynamic>? existing) async {
     final controllers = <String, TextEditingController>{};
     final boolValues = <String, bool>{};
+    final dateValues = <String, DateTime?>{};
 
     for (final col in _columns) {
       if (col.columnType == 'BOOLEAN') {
         boolValues[col.dbColumnName] = existing != null &&
             (existing[col.dbColumnName] == 1 ||
                 existing[col.dbColumnName] == true);
+      } else if (col.columnType == 'DATE' || col.columnType == 'DATETIME') {
+        final raw = existing?[col.dbColumnName]?.toString() ?? '';
+        dateValues[col.dbColumnName] = raw.isNotEmpty ? DateTime.tryParse(raw) : null;
       } else {
         controllers[col.dbColumnName] = TextEditingController(
           text: existing?[col.dbColumnName]?.toString() ?? '',
@@ -205,6 +217,80 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
                             setDialogState(
                                 () => boolValues[col.dbColumnName] = v ?? false);
                           },
+                        );
+                      }
+                      if (col.columnType == 'DATE' || col.columnType == 'DATETIME') {
+                        final current = dateValues[col.dbColumnName];
+                        final isDateTime = col.columnType == 'DATETIME';
+                        String displayText = '';
+                        if (current != null) {
+                          displayText = isDateTime
+                              ? DateFormat('dd-MM-yyyy HH:mm').format(current)
+                              : DateFormat('dd-MM-yyyy').format(current);
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: InkWell(
+                            onTap: () async {
+                              final pickedDate = await showDatePicker(
+                                context: ctx,
+                                initialDate: current ?? DateTime.now(),
+                                firstDate: DateTime(1900),
+                                lastDate: DateTime(2100),
+                              );
+                              if (pickedDate == null) return;
+                              DateTime finalValue = pickedDate;
+                              if (isDateTime) {
+                                final pickedTime = await showTimePicker(
+                                  context: ctx,
+                                  initialTime: current != null
+                                      ? TimeOfDay.fromDateTime(current)
+                                      : TimeOfDay.now(),
+                                );
+                                if (pickedTime != null) {
+                                  finalValue = DateTime(
+                                    pickedDate.year,
+                                    pickedDate.month,
+                                    pickedDate.day,
+                                    pickedTime.hour,
+                                    pickedTime.minute,
+                                  );
+                                }
+                              }
+                              setDialogState(() {
+                                dateValues[col.dbColumnName] = finalValue;
+                              });
+                            },
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: col.columnName,
+                                isDense: true,
+                                suffixIcon: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (current != null)
+                                      IconButton(
+                                        icon: const Icon(Icons.clear, size: 18),
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            dateValues[col.dbColumnName] = null;
+                                          });
+                                        },
+                                      ),
+                                    Icon(isDateTime ? Icons.access_time : Icons.calendar_today, size: 18),
+                                  ],
+                                ),
+                              ),
+                              child: Text(
+                                displayText.isEmpty ? l.tr(isDateTime ? 'selectDateTime' : 'selectDate') : displayText,
+                                style: TextStyle(
+                                  color: displayText.isEmpty
+                                      ? Theme.of(ctx).hintColor
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ),
                         );
                       }
                       return Padding(
@@ -245,6 +331,9 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
                     if (col.columnType == 'BOOLEAN') {
                       data[col.dbColumnName] =
                           (boolValues[col.dbColumnName] ?? false) ? 1 : 0;
+                    } else if (col.columnType == 'DATE' || col.columnType == 'DATETIME') {
+                      final dt = dateValues[col.dbColumnName];
+                      data[col.dbColumnName] = dt?.toIso8601String() ?? '';
                     } else {
                       final text =
                           controllers[col.dbColumnName]?.text.trim() ?? '';

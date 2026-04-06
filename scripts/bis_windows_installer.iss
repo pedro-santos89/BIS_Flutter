@@ -38,11 +38,25 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 ; Copy the entire release build output
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Copy documentation files
+Source: "..\README.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "..\USAGE_MANUAL.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "..\INSTALL_WINDOWS.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 
 [Icons]
+; Start Menu shortcuts
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\README"; Filename: "{app}\docs\README.md"
+Name: "{group}\Usage Manual"; Filename: "{app}\docs\USAGE_MANUAL.md"
+Name: "{group}\Installation Guide"; Filename: "{app}\docs\INSTALL_WINDOWS.md"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+; Desktop shortcut (optional)
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[UninstallDelete]
+; Remove docs folder and any app-created data inside the install directory
+Type: filesandordirs; Name: "{app}\docs"
+Type: filesandordirs; Name: "{app}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch BIS"; Flags: nowait postinstall skipifsilent

@@ -842,6 +842,10 @@ class DatabaseHelper {
             case 'BOOLEAN':
               data[col.dbColumnName] = ['true', '1', 'yes'].contains(value.toLowerCase()) ? 1 : 0;
               break;
+            case 'DATE':
+            case 'DATETIME':
+              data[col.dbColumnName] = DateTime.tryParse(value)?.toIso8601String() ?? value;
+              break;
             default:
               data[col.dbColumnName] = value;
           }

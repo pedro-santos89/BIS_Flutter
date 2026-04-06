@@ -250,6 +250,10 @@ class AppLocalizations {
     'typeInteger': 'Integer',
     'typeDecimal': 'Decimal',
     'typeYesNo': 'Yes/No',
+    'typeDate': 'Date',
+    'typeDateHour': 'Date+Hour',
+    'selectDate': 'Select date',
+    'selectDateTime': 'Select date and time',
     'removeColumn': 'Remove column',
     'saveChanges': 'Save Changes',
 
@@ -517,6 +521,10 @@ class AppLocalizations {
     'typeInteger': 'Inteiro',
     'typeDecimal': 'Decimal',
     'typeYesNo': 'Sim/Não',
+    'typeDate': 'Data',
+    'typeDateHour': 'Data+Hora',
+    'selectDate': 'Selecionar data',
+    'selectDateTime': 'Selecionar data e hora',
     'removeColumn': 'Remover coluna',
     'saveChanges': 'Guardar Alterações',
 
