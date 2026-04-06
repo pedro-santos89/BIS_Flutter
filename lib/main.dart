@@ -17,6 +17,7 @@ import 'screens/custom_table_list_screen.dart';
 import 'screens/custom_table_design_screen.dart';
 import 'screens/custom_table_data_screen.dart';
 import 'screens/user_management_screen.dart';
+import 'screens/cloud_sync_screen.dart';
 
 /// Entry point for the BIS (BUS Information System) Flutter app.
 /// Initializes sqflite FFI for desktop platforms (Windows, Linux, macOS),
@@ -103,6 +104,7 @@ class BisApp extends StatelessWidget {
         '/admin/custom-tables/design': (context) => const CustomTableDesignScreen(),
         '/admin/custom-tables/data': (context) => const CustomTableDataScreen(),
         '/admin/users': (context) => const UserManagementScreen(),
+        '/admin/cloud-sync': (context) => const CloudSyncScreen(),
       },
     );
   }

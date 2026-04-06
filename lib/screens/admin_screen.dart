@@ -308,6 +308,21 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ],
             ),
+            const Divider(height: 32),
+            Text(
+              AppLocalizations.of(context).tr('sectionCloudSync'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5,
+              ),
+            ),
+            const Divider(),
+            _AdminTile(
+              icon: Icons.cloud_sync,
+              title: AppLocalizations.of(context).tr('cloudSync'),
+              subtitle: AppLocalizations.of(context).tr('cloudSyncSubtitle'),
+              onTap: () => Navigator.pushNamed(context, '/admin/cloud-sync'),
+            ),
           ],
         ),
       ),
