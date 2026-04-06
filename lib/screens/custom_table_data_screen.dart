@@ -9,8 +9,12 @@ import 'dart:convert';
 import '../database_helper.dart';
 import '../models.dart';
 import '../export_helper.dart';
+import '../l10n.dart';
 import '../theme.dart';
 
+/// Data management screen for a single custom table.
+/// Provides a paginated DataTable with CRUD operations, search,
+/// multi-select, sorting, CSV/PDF export, and CSV import.
 class CustomTableDataScreen extends StatefulWidget {
   const CustomTableDataScreen({super.key});
 
@@ -20,15 +24,26 @@ class CustomTableDataScreen extends StatefulWidget {
 
 class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
   final _searchController = TextEditingController();
+
+  /// The DB column name currently used as the search filter target.
   String? _searchColumn;
+
+  /// Current page of rows fetched from the database.
   List<Map<String, dynamic>> _rows = [];
+
+  /// Total row count matching the current search (for pagination).
   int _totalCount = 0;
   int _currentPage = 0;
   int _pageSize = 25;
   bool _loading = true;
+
+  /// IDs of rows selected via checkboxes (used for bulk actions).
   final Set<int> _selectedIds = {};
   int _sortColumnIndex = 0;
   bool _sortAscending = true;
+  String _sortColumn = 'id';
+
+  /// The table definition passed via route arguments.
   CustomTableDef? _tableDef;
   bool _initialized = false;
 
@@ -54,6 +69,8 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     super.dispose();
   }
 
+  /// Fetches a page of rows from the custom table, applying search,
+  /// sort, and pagination parameters. Clears selection afterward.
   Future<void> _loadRows() async {
     if (_tableDef == null) return;
     setState(() => _loading = true);
@@ -64,6 +81,8 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
       searchColumn: _searchColumn,
       limit: _pageSize,
       offset: _currentPage * _pageSize,
+      orderBy: _sortColumn,
+      ascending: _sortAscending,
     );
     final count = await DatabaseHelper.instance.getCustomRowCount(
       dbTableName: _tableDef!.dbTableName,
@@ -82,11 +101,14 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
 
   List<CustomColumnDef> get _columns => _tableDef?.columns ?? [];
 
+  /// Formats a [DateTime] as dd-MM-yyyy HH:mm:ss for display.
   String _formatDate(DateTime? dt) {
     if (dt == null) return '';
     return DateFormat('dd-MM-yyyy HH:mm:ss').format(dt);
   }
 
+  /// Returns a human-readable string for a cell value,
+  /// converting booleans to Yes/No.
   String _displayValue(CustomColumnDef col, dynamic value) {
     if (value == null) return '';
     if (col.columnType == 'BOOLEAN') {
@@ -95,30 +117,26 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     return value.toString();
   }
 
+  /// Updates sort state and reloads rows from page 0.
   void _sort(int columnIndex, bool ascending) {
+    String dbCol;
+    if (columnIndex == 0) {
+      dbCol = 'id';
+    } else if (columnIndex <= _columns.length) {
+      dbCol = _columns[columnIndex - 1].dbColumnName;
+    } else {
+      dbCol = 'created_at';
+    }
     setState(() {
       _sortColumnIndex = columnIndex;
       _sortAscending = ascending;
-      // column 0 = id, 1..n = user columns, n+1 = created_at
-      _rows.sort((a, b) {
-        dynamic aVal, bVal;
-        if (columnIndex == 0) {
-          aVal = a['id'] ?? 0;
-          bVal = b['id'] ?? 0;
-        } else if (columnIndex <= _columns.length) {
-          final col = _columns[columnIndex - 1];
-          aVal = a[col.dbColumnName] ?? '';
-          bVal = b[col.dbColumnName] ?? '';
-        } else {
-          aVal = a['created_at'] ?? '';
-          bVal = b['created_at'] ?? '';
-        }
-        final cmp = Comparable.compare(aVal as Comparable, bVal as Comparable);
-        return ascending ? cmp : -cmp;
-      });
+      _sortColumn = dbCol;
+      _currentPage = 0;
     });
+    _loadRows();
   }
 
+  /// Opens the row dialog for creating a new row, then inserts it.
   Future<void> _addRow() async {
     final result = await _showRowDialog(null);
     if (result != null) {
@@ -130,6 +148,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     }
   }
 
+  /// Opens the row dialog pre-filled with [row] data for editing.
   Future<void> _editRow(Map<String, dynamic> row) async {
     final result = await _showRowDialog(row);
     if (result != null) {
@@ -142,6 +161,8 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     }
   }
 
+  /// Shows a dialog with fields for each column to create or edit a row.
+  /// Returns a map of column->value on save, or null on cancel.
   Future<Map<String, dynamic>?> _showRowDialog(
       Map<String, dynamic>? existing) async {
     final controllers = <String, TextEditingController>{};
@@ -163,87 +184,90 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(existing != null ? 'Edit Row' : 'Add Row'),
-          content: SizedBox(
-            width: 400,
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _columns.map((col) {
-                    if (col.columnType == 'BOOLEAN') {
-                      return CheckboxListTile(
-                        title: Text(col.columnName),
-                        value: boolValues[col.dbColumnName] ?? false,
-                        onChanged: (v) {
-                          setDialogState(
-                              () => boolValues[col.dbColumnName] = v ?? false);
-                        },
-                      );
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: TextFormField(
-                        controller: controllers[col.dbColumnName],
-                        decoration: InputDecoration(
-                          labelText: col.columnName,
-                          hintText: col.columnType == 'INTEGER'
-                              ? 'Enter a number'
-                              : col.columnType == 'REAL'
-                                  ? 'Enter a decimal'
-                                  : 'Enter text',
+      builder: (ctx) {
+        final l = AppLocalizations.of(ctx);
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            title: Text(existing != null ? l.tr('editRow') : l.tr('addRow')),
+            content: SizedBox(
+              width: 400,
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _columns.map((col) {
+                      if (col.columnType == 'BOOLEAN') {
+                        return CheckboxListTile(
+                          title: Text(col.columnName),
+                          value: boolValues[col.dbColumnName] ?? false,
+                          onChanged: (v) {
+                            setDialogState(
+                                () => boolValues[col.dbColumnName] = v ?? false);
+                          },
+                        );
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextFormField(
+                          controller: controllers[col.dbColumnName],
+                          decoration: InputDecoration(
+                            labelText: col.columnName,
+                            hintText: col.columnType == 'INTEGER'
+                                ? l.tr('enterNumber')
+                                : col.columnType == 'REAL'
+                                    ? l.tr('enterDecimal')
+                                    : l.tr('enterText'),
+                          ),
+                          keyboardType: col.columnType == 'INTEGER' ||
+                                  col.columnType == 'REAL'
+                              ? TextInputType.number
+                              : TextInputType.text,
+                          validator: (v) =>
+                              v == null || v.trim().isEmpty ? l.tr('required') : null,
                         ),
-                        keyboardType: col.columnType == 'INTEGER' ||
-                                col.columnType == 'REAL'
-                            ? TextInputType.number
-                            : TextInputType.text,
-                        validator: (v) =>
-                            v == null || v.trim().isEmpty ? 'Required' : null,
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-                final data = <String, dynamic>{};
-                for (final col in _columns) {
-                  if (col.columnType == 'BOOLEAN') {
-                    data[col.dbColumnName] =
-                        (boolValues[col.dbColumnName] ?? false) ? 1 : 0;
-                  } else {
-                    final text =
-                        controllers[col.dbColumnName]?.text.trim() ?? '';
-                    switch (col.columnType) {
-                      case 'INTEGER':
-                        data[col.dbColumnName] = int.tryParse(text) ?? 0;
-                        break;
-                      case 'REAL':
-                        data[col.dbColumnName] = double.tryParse(text) ?? 0.0;
-                        break;
-                      default:
-                        data[col.dbColumnName] = text;
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(l.tr('cancel')),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) return;
+                  final data = <String, dynamic>{};
+                  for (final col in _columns) {
+                    if (col.columnType == 'BOOLEAN') {
+                      data[col.dbColumnName] =
+                          (boolValues[col.dbColumnName] ?? false) ? 1 : 0;
+                    } else {
+                      final text =
+                          controllers[col.dbColumnName]?.text.trim() ?? '';
+                      switch (col.columnType) {
+                        case 'INTEGER':
+                          data[col.dbColumnName] = int.tryParse(text) ?? 0;
+                          break;
+                        case 'REAL':
+                          data[col.dbColumnName] = double.tryParse(text) ?? 0.0;
+                          break;
+                        default:
+                          data[col.dbColumnName] = text;
+                      }
                     }
                   }
-                }
-                Navigator.pop(ctx, data);
-              },
-              child: Text(existing != null ? 'Save' : 'Add'),
-            ),
-          ],
-        ),
-      ),
+                  Navigator.pop(ctx, data);
+                },
+                child: Text(existing != null ? l.tr('save') : l.tr('add')),
+              ),
+            ],
+          ),
+        );
+      },
     );
 
     for (final c in controllers.values) {
@@ -252,23 +276,27 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     return result;
   }
 
+  /// Confirms and deletes a single row by its ID.
   Future<void> _deleteRow(Map<String, dynamic> row) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Row'),
-        content: Text('Delete row #${row['id']}?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final l = AppLocalizations.of(ctx);
+        return AlertDialog(
+          title: Text(l.tr('deleteRow')),
+          content: Text(l.trArgs('deleteRowConfirm', {'id': row['id'].toString()})),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l.tr('cancel'))),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(l.tr('delete')),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirm == true) {
@@ -278,67 +306,76 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     }
   }
 
+  /// Confirms and deletes all currently selected (checked) rows.
   Future<void> _deleteSelected() async {
     if (_selectedIds.isEmpty) return;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Selected Rows'),
-        content: Text(
-            'Delete ${_selectedIds.length} selected row(s)? This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final l = AppLocalizations.of(ctx);
+        return AlertDialog(
+          title: Text(l.tr('deleteSelectedRows')),
+          content: Text(
+              l.trArgs('deleteSelectedRowsConfirm', {'count': _selectedIds.length.toString()})),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l.tr('cancel'))),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(l.tr('delete')),
+            ),
+          ],
+        );
+      },
     );
     if (confirm == true) {
       final count = await DatabaseHelper.instance
           .deleteCustomRows(_tableDef!.dbTableName, _selectedIds.toList());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $count row(s)')),
+        SnackBar(content: Text(AppLocalizations.of(context).trArgs('deletedRows', {'count': count.toString()}))),
       );
       _loadRows();
     }
   }
 
+  /// Confirms and deletes every row in the custom table.
   Future<void> _deleteAll() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete ALL Rows'),
-        content: const Text(
-            'This will permanently delete ALL rows. This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final l = AppLocalizations.of(ctx);
+        return AlertDialog(
+          title: Text(l.tr('deleteAllRows')),
+          content: Text(l.tr('deleteAllRowsConfirm')),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l.tr('cancel'))),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(l.tr('deleteAll')),
+            ),
+          ],
+        );
+      },
     );
     if (confirm == true) {
       final count = await DatabaseHelper.instance
           .deleteAllCustomRows(_tableDef!.dbTableName);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $count row(s)')),
+        SnackBar(content: Text(AppLocalizations.of(context).trArgs('deletedRows', {'count': count.toString()}))),
       );
       _loadRows();
     }
   }
 
+  /// Exports rows to a CSV file. If [allRecords] is true, exports the
+  /// entire table; otherwise exports only selected rows.
   Future<void> _exportCsv({bool allRecords = false}) async {
     final List<Map<String, dynamic>> toExport;
     if (allRecords) {
@@ -348,7 +385,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
       toExport = _rows.where((r) => _selectedIds.contains(r['id'])).toList();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No rows selected for export')),
+        SnackBar(content: Text(AppLocalizations.of(context).tr('noRowsSelectedExport'))),
       );
       return;
     }
@@ -381,10 +418,12 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     await File(path).writeAsString(csvData, encoding: utf8);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Exported ${toExport.length} rows to $path')),
+      SnackBar(content: Text(AppLocalizations.of(context).trArgs('exportedRowsCsv', {'count': toExport.length.toString(), 'path': path}))),
     );
   }
 
+  /// Exports rows to a paginated landscape PDF file. If [allRecords]
+  /// is true, exports the entire table; otherwise exports selected rows.
   Future<void> _exportPdf({bool allRecords = false}) async {
     final List<Map<String, dynamic>> toExport;
     if (allRecords) {
@@ -394,7 +433,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
       toExport = _rows.where((r) => _selectedIds.contains(r['id'])).toList();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No rows selected for export')),
+        SnackBar(content: Text(AppLocalizations.of(context).tr('noRowsSelectedExport'))),
       );
       return;
     }
@@ -522,6 +561,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     );
   }
 
+  /// Picks a CSV file, parses it, and bulk-imports rows into the table.
   Future<void> _importCsv() async {
     final dataRows = await ExportHelper.pickAndParseCsv();
     if (dataRows == null) return;
@@ -536,7 +576,10 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'CSV import: ${counts['created']} created, ${counts['errors']} errors',
+          AppLocalizations.of(context).trArgs('csvImportRowsResult', {
+            'created': counts['created'].toString(),
+            'errors': counts['errors'].toString(),
+          }),
         ),
       ),
     );
@@ -546,12 +589,13 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
   @override
   Widget build(BuildContext context) {
     if (_tableDef == null) {
-      return const Scaffold(
-        body: Center(child: Text('No table selected')),
+      return Scaffold(
+        body: Center(child: Text(AppLocalizations.of(context).tr('noTableSelected'))),
       );
     }
 
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -585,30 +629,30 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
               }
             },
             itemBuilder: (ctx) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                   value: 'export_selected',
-                  child: Text('Export selected to CSV')),
-              const PopupMenuItem(
-                  value: 'export_all', child: Text('Export ALL to CSV')),
+                  child: Text(l.tr('exportSelectedCsv'))),
+              PopupMenuItem(
+                  value: 'export_all', child: Text(l.tr('exportAllCsv'))),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                   value: 'pdf_selected',
-                  child: Text('Export selected to PDF')),
-              const PopupMenuItem(
-                  value: 'pdf_all', child: Text('Export ALL to PDF')),
+                  child: Text(l.tr('exportSelectedCsv').replaceAll('CSV', 'PDF'))),
+              PopupMenuItem(
+                  value: 'pdf_all', child: Text(l.tr('exportAllCsv').replaceAll('CSV', 'PDF'))),
               const PopupMenuDivider(),
-              const PopupMenuItem(
-                  value: 'import', child: Text('Import from CSV')),
+              PopupMenuItem(
+                  value: 'import', child: Text(l.tr('importFromCsv'))),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete_selected',
-                child: Text('Delete selected',
+                child: Text(l.tr('deleteSelected'),
                     style: TextStyle(color: Colors.red)),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete_all',
                 child:
-                    Text('Delete ALL', style: TextStyle(color: Colors.red)),
+                    Text(l.tr('deleteAllCaps'), style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -616,7 +660,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addRow,
-        tooltip: 'Add Row',
+        tooltip: l.tr('addRow'),
         child: const Icon(Icons.add),
       ),
       body: Column(
@@ -630,7 +674,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      hintText: 'Search...',
+                      hintText: l.tr('search'),
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
@@ -682,13 +726,13 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
             child: Row(
               children: [
                 Text(
-                  '$_totalCount row${_totalCount != 1 ? 's' : ''}',
+                  l.trArgs('rowsCount', {'count': _totalCount.toString()}),
                   style: theme.textTheme.bodySmall,
                 ),
                 const Spacer(),
                 if (_selectedIds.isNotEmpty)
                   Text(
-                    '${_selectedIds.length} selected',
+                    l.trArgs('selected', {'count': _selectedIds.length.toString()}),
                     style: theme.textTheme.bodySmall,
                   ),
               ],
@@ -701,7 +745,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _rows.isEmpty
-                    ? const Center(child: Text('No rows found'))
+                    ? Center(child: Text(l.tr('noRowsFound')))
                     : SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: SingleChildScrollView(
@@ -728,7 +772,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
                                   .dataRowColor,
                               columns: [
                                 DataColumn(
-                                    label: _HoverHeader(text: 'ID'),
+                                    label: _HoverHeader(text: l.tr('id')),
                                     onSort: _sort,
                                     numeric: true),
                                 ..._columns.asMap().entries.map(
@@ -744,7 +788,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
                                 DataColumn(
                                     label: _HoverHeader(text: 'Created'),
                                     onSort: _sort),
-                                const DataColumn(label: Text('Actions')),
+                                DataColumn(label: Text(l.tr('actions'))),
                               ],
                               rows: _rows.map((row) {
                                 final id = row['id'] as int;
@@ -788,14 +832,14 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
                                           IconButton(
                                             icon: const Icon(Icons.edit,
                                                 size: 18),
-                                            tooltip: 'Edit',
+                                            tooltip: l.tr('edit'),
                                             onPressed: () => _editRow(row),
                                           ),
                                           IconButton(
                                             icon: const Icon(Icons.delete,
                                                 size: 18,
                                                 color: Colors.red),
-                                            tooltip: 'Delete',
+                                            tooltip: l.tr('delete'),
                                             onPressed: () =>
                                                 _deleteRow(row),
                                           ),
@@ -817,7 +861,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('Rows per page: '),
+                Text(l.tr('rowsPerPage')),
                 DropdownButton<int>(
                   value: _pageSize,
                   items: const [
@@ -845,7 +889,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
                       : null,
                 ),
                 Text(
-                    'Page ${_currentPage + 1} of ${_totalPages < 1 ? 1 : _totalPages}'),
+                    l.trArgs('pageOf', {'current': '${_currentPage + 1}', 'total': '${_totalPages < 1 ? 1 : _totalPages}'})),
                 IconButton(
                   icon: const Icon(Icons.chevron_right),
                   onPressed: _currentPage < _totalPages - 1
@@ -864,6 +908,7 @@ class _CustomTableDataScreenState extends State<CustomTableDataScreen> {
   }
 }
 
+/// Sortable column header widget with hover color effect.
 class _HoverHeader extends StatefulWidget {
   final String text;
   const _HoverHeader({required this.text});

@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -40,7 +42,7 @@ dependencies:
   file_picker: ^10.3.10
   csv: ^8.0.0
   sqflite_common_ffi: ^2.4.0+2
-  google_fonts: ^8.0.2
+  # google_fonts: ^8.0.2  # Now using bundled fonts instead
   pdf: ^3.12.0
 
 dev_dependencies:
@@ -100,3 +102,9 @@ flutter:
     - family: Rowsky
       fonts:
         - asset: assets/fonts/Rowsky-Demo.otf
+    - family: Oswald
+      fonts:
+        - asset: assets/fonts/Oswald-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Oswald-SemiBold.ttf
+          weight: 600

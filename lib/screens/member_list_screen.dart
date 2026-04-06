@@ -3,8 +3,13 @@ import 'package:intl/intl.dart';
 import '../database_helper.dart';
 import '../models.dart';
 import '../export_helper.dart';
+import '../l10n.dart';
 import '../theme.dart';
 
+/// Screen that displays a paginated, sortable DataTable of all [Member] records.
+///
+/// Supports server-side search (by name, email, or member number), multi-select,
+/// bulk delete, CSV/PDF export, and CSV import.
 class MemberListScreen extends StatefulWidget {
   const MemberListScreen({super.key});
 
@@ -12,17 +17,41 @@ class MemberListScreen extends StatefulWidget {
   State<MemberListScreen> createState() => _MemberListScreenState();
 }
 
+/// State for [MemberListScreen]. Manages pagination, sorting, search, and
+/// row selection for the members DataTable.
 class _MemberListScreenState extends State<MemberListScreen> {
   final _searchController = TextEditingController();
+
+  /// Which DB column to filter on: 'name', 'email', or 'member_number'.
   String _searchBy = 'name';
+
+  /// Current page of members returned from the database.
   List<Member> _members = [];
+
+  /// Total matching member count (for pagination calculation).
   int _totalCount = 0;
+
+  /// Zero-based current page index.
   int _currentPage = 0;
+
+  /// Number of rows per page.
   int _pageSize = 25;
   bool _loading = true;
+
+  /// IDs of rows currently selected via checkboxes (for bulk actions).
   final Set<int> _selectedIds = {};
+
+  /// Index of the DataColumn currently sorted (maps to [_columnDbNames]).
   int _sortColumnIndex = 0;
   bool _sortAscending = true;
+
+  /// Database column name used in the ORDER BY clause.
+  String _sortColumn = 'member_number';
+
+  /// Maps DataColumn display index to the corresponding DB column name.
+  static const _columnDbNames = [
+    'member_number', 'name', 'email', 'communication', 'annual_fee', 'id', 'created_at',
+  ];
 
   @override
   void initState() {
@@ -36,6 +65,8 @@ class _MemberListScreenState extends State<MemberListScreen> {
     super.dispose();
   }
 
+  /// Fetches one page of members from the database using the current search,
+  /// sort, and pagination state. Clears selection after loading.
   Future<void> _loadMembers() async {
     setState(() => _loading = true);
     final search = _searchController.text.trim();
@@ -44,6 +75,8 @@ class _MemberListScreenState extends State<MemberListScreen> {
       searchBy: _searchBy,
       limit: _pageSize,
       offset: _currentPage * _pageSize,
+      orderBy: _sortColumn,
+      ascending: _sortAscending,
     );
     final count = await DatabaseHelper.instance.getMemberCount(
       search: search.isEmpty ? null : search,
@@ -59,25 +92,15 @@ class _MemberListScreenState extends State<MemberListScreen> {
 
   int get _totalPages => (_totalCount / _pageSize).ceil();
 
+  /// Callback for DataColumn.onSort — updates sort state and reloads from page 0.
   void _sort(int columnIndex, bool ascending) {
     setState(() {
       _sortColumnIndex = columnIndex;
       _sortAscending = ascending;
-      _members.sort((a, b) {
-        Comparable aVal, bVal;
-        switch (columnIndex) {
-          case 0: aVal = a.memberNumber ?? 0; bVal = b.memberNumber ?? 0;
-          case 1: aVal = a.name.toLowerCase(); bVal = b.name.toLowerCase();
-          case 2: aVal = (a.email ?? '').toLowerCase(); bVal = (b.email ?? '').toLowerCase();
-          case 3: aVal = a.communication ? 1 : 0; bVal = b.communication ? 1 : 0;
-          case 4: aVal = a.annualFee ? 1 : 0; bVal = b.annualFee ? 1 : 0;
-          case 5: aVal = a.id ?? 0; bVal = b.id ?? 0;
-          case 6: aVal = a.createdAt ?? DateTime(1970); bVal = b.createdAt ?? DateTime(1970);
-          default: aVal = a.id ?? 0; bVal = b.id ?? 0;
-        }
-        return ascending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
-      });
+      _sortColumn = _columnDbNames[columnIndex];
+      _currentPage = 0;
     });
+    _loadMembers();
   }
 
   String _formatDate(DateTime? dt) {
@@ -85,6 +108,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
     return DateFormat('dd-MM-yyyy HH:mm:ss').format(dt);
   }
 
+  /// Exports members to a CSV file. Exports all records or only selected rows.
   Future<void> _exportCsv({bool allRecords = false}) async {
     final List<Member> toExport;
     if (allRecords) {
@@ -94,7 +118,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
           _members.where((m) => _selectedIds.contains(m.id)).toList();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No members selected for export')),
+        SnackBar(content: Text(AppLocalizations.of(context).tr('noMembersSelectedExport'))),
       );
       return;
     }
@@ -103,11 +127,12 @@ class _MemberListScreenState extends State<MemberListScreen> {
     if (!mounted) return;
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Exported ${toExport.length} members to $path')),
+        SnackBar(content: Text(AppLocalizations.of(context).trArgs('exportedMembersCsv', {'count': '${toExport.length}', 'path': path}))),
       );
     }
   }
 
+  /// Exports members to a PDF file. Exports all records or only selected rows.
   Future<void> _exportPdf({bool allRecords = false}) async {
     final List<Member> toExport;
     if (allRecords) {
@@ -117,7 +142,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
           _members.where((m) => _selectedIds.contains(m.id)).toList();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No members selected for export')),
+        SnackBar(content: Text(AppLocalizations.of(context).tr('noMembersSelectedExport'))),
       );
       return;
     }
@@ -125,11 +150,13 @@ class _MemberListScreenState extends State<MemberListScreen> {
     if (!mounted) return;
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF exported to $path')),
+        SnackBar(content: Text(AppLocalizations.of(context).trArgs('pdfExported', {'path': path}))),
       );
     }
   }
 
+  /// Opens a file picker for a CSV file, parses it, and upserts members.
+  /// Shows a snackbar with created/updated/error counts.
   Future<void> _importCsv() async {
     final dataRows = await ExportHelper.pickAndParseCsv();
     if (dataRows == null) return;
@@ -141,28 +168,30 @@ class _MemberListScreenState extends State<MemberListScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'CSV import: ${counts['created']} created, ${counts['updated']} updated, ${counts['errors']} errors',
+          AppLocalizations.of(context).trArgs('csvImportResult', {'created': '${counts['created']}', 'updated': '${counts['updated']}', 'errors': '${counts['errors']}'}),
         ),
       ),
     );
     _loadMembers();
   }
 
+  /// Deletes a single member after a confirmation dialog.
   Future<void> _deleteMember(Member member) async {
+    final l = AppLocalizations.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Member'),
-        content: Text('Delete "${member.name}" (#${member.memberNumber})?'),
+        title: Text(l.tr('deleteMember')),
+        content: Text(l.trArgs('deleteMemberConfirm', {'name': member.name, 'number': '${member.memberNumber}'})),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(l.tr('cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(l.tr('delete')),
           ),
         ],
       ),
@@ -174,24 +203,26 @@ class _MemberListScreenState extends State<MemberListScreen> {
     }
   }
 
+  /// Deletes all currently selected members after a confirmation dialog.
   Future<void> _deleteSelected() async {
+    final l = AppLocalizations.of(context);
     if (_selectedIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No members selected')),
+        SnackBar(content: Text(l.tr('noMembersSelected'))),
       );
       return;
     }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Selected Members'),
-        content: Text('Delete ${_selectedIds.length} selected member(s)? This cannot be undone.'),
+        title: Text(l.tr('deleteSelectedMembers')),
+        content: Text(l.trArgs('deleteSelectedMembersConfirm', {'count': '${_selectedIds.length}'})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.tr('cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(l.tr('delete')),
           ),
         ],
       ),
@@ -200,24 +231,26 @@ class _MemberListScreenState extends State<MemberListScreen> {
       final count = await DatabaseHelper.instance.deleteMembers(_selectedIds.toList());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $count member(s)')),
+        SnackBar(content: Text(l.trArgs('deletedMembers', {'count': '$count'}))),
       );
       _loadMembers();
     }
   }
 
+  /// Deletes every member in the database after a confirmation dialog.
   Future<void> _deleteAll() async {
+    final l = AppLocalizations.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete ALL Members'),
-        content: const Text('This will permanently delete ALL members from the database. This cannot be undone.\n\nAre you sure?'),
+        title: Text(l.tr('deleteAllMembers')),
+        content: Text(l.tr('deleteAllMembersConfirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.tr('cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete All'),
+            child: Text(l.tr('deleteAll')),
           ),
         ],
       ),
@@ -226,7 +259,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
       final count = await DatabaseHelper.instance.deleteAllMembers();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $count member(s)')),
+        SnackBar(content: Text(l.trArgs('deletedMembers', {'count': '$count'}))),
       );
       _loadMembers();
     }
@@ -235,10 +268,11 @@ class _MemberListScreenState extends State<MemberListScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Members'),
+        title: Text(l.tr('members')),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -268,36 +302,36 @@ class _MemberListScreenState extends State<MemberListScreen> {
               }
             },
             itemBuilder: (ctx) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'export_selected',
-                child: Text('Export selected to CSV'),
+                child: Text(l.tr('exportSelectedCsv')),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'export_all',
-                child: Text('Export ALL to CSV'),
+                child: Text(l.tr('exportAllCsv')),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'pdf_selected',
-                child: Text('Export selected to PDF'),
+                child: Text(l.tr('exportSelectedPdf')),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'pdf_all',
-                child: Text('Export ALL to PDF'),
+                child: Text(l.tr('exportAllPdf')),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'import',
-                child: Text('Import from CSV'),
+                child: Text(l.tr('importFromCsv')),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete_selected',
-                child: Text('Delete selected', style: TextStyle(color: Colors.red)),
+                child: Text(l.tr('deleteSelected'), style: const TextStyle(color: Colors.red)),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete_all',
-                child: Text('Delete ALL', style: TextStyle(color: Colors.red)),
+                child: Text(l.tr('deleteAllCaps'), style: const TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -308,7 +342,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
           await Navigator.pushNamed(context, '/admin/members/add');
           _loadMembers();
         },
-        tooltip: 'Add Member',
+        tooltip: l.tr('addMember'),
         child: const Icon(Icons.add),
       ),
       body: Column(
@@ -322,7 +356,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      hintText: 'Search members...',
+                      hintText: l.tr('searchMembers'),
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
@@ -344,12 +378,12 @@ class _MemberListScreenState extends State<MemberListScreen> {
                 const SizedBox(width: 8),
                 DropdownButton<String>(
                   value: _searchBy,
-                  items: const [
-                    DropdownMenuItem(value: 'name', child: Text('Name')),
-                    DropdownMenuItem(value: 'email', child: Text('Email')),
+                  items: [
+                    DropdownMenuItem(value: 'name', child: Text(l.tr('name'))),
+                    DropdownMenuItem(value: 'email', child: Text(l.tr('email'))),
                     DropdownMenuItem(
                       value: 'member_number',
-                      child: Text('Member #'),
+                      child: Text(l.tr('memberNumber')),
                     ),
                   ],
                   onChanged: (v) {
@@ -376,13 +410,13 @@ class _MemberListScreenState extends State<MemberListScreen> {
             child: Row(
               children: [
                 Text(
-                  '$_totalCount member${_totalCount != 1 ? 's' : ''}',
+                  l.trArgs('membersCount', {'count': '$_totalCount'}),
                   style: theme.textTheme.bodySmall,
                 ),
                 const Spacer(),
                 if (_selectedIds.isNotEmpty)
                   Text(
-                    '${_selectedIds.length} selected',
+                    l.trArgs('selected', {'count': '${_selectedIds.length}'}),
                     style: theme.textTheme.bodySmall,
                   ),
               ],
@@ -395,7 +429,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _members.isEmpty
-                    ? const Center(child: Text('No members found'))
+                    ? Center(child: Text(l.tr('noMembersFound')))
                     : SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: SingleChildScrollView(
@@ -414,14 +448,14 @@ class _MemberListScreenState extends State<MemberListScreen> {
                             ),
                             dataRowColor: Theme.of(context).dataTableTheme.dataRowColor,
                             columns: [
-                              DataColumn(label: _HoverHeader(text: 'Member #'), onSort: _sort, numeric: true),
-                              DataColumn(label: _HoverHeader(text: 'Name'), onSort: _sort),
-                              DataColumn(label: _HoverHeader(text: 'Email'), onSort: _sort),
-                              DataColumn(label: _HoverHeader(text: 'Comm.'), onSort: _sort),
-                              DataColumn(label: _HoverHeader(text: 'Fee'), onSort: _sort),
-                              DataColumn(label: _HoverHeader(text: 'ID'), onSort: _sort, numeric: true),
-                              DataColumn(label: _HoverHeader(text: 'Created (Lisbon)'), onSort: _sort),
-                              const DataColumn(label: Text('Actions')),
+                              DataColumn(label: _HoverHeader(text: l.tr('memberNumber')), onSort: _sort, numeric: true),
+                              DataColumn(label: _HoverHeader(text: l.tr('name')), onSort: _sort),
+                              DataColumn(label: _HoverHeader(text: l.tr('email')), onSort: _sort),
+                              DataColumn(label: _HoverHeader(text: l.tr('communication')), onSort: _sort),
+                              DataColumn(label: _HoverHeader(text: l.tr('fee')), onSort: _sort),
+                              DataColumn(label: _HoverHeader(text: l.tr('id')), onSort: _sort, numeric: true),
+                              DataColumn(label: _HoverHeader(text: l.tr('createdLisbon')), onSort: _sort),
+                              DataColumn(label: Text(l.tr('actions'))),
                             ],
                             rows: _members.map((m) {
                               final selected = _selectedIds.contains(m.id);
@@ -491,7 +525,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.edit,
                                               size: 18),
-                                          tooltip: 'Edit',
+                                          tooltip: l.tr('edit'),
                                           onPressed: () async {
                                             await Navigator.pushNamed(
                                               context,
@@ -504,7 +538,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.delete,
                                               size: 18, color: Colors.red),
-                                          tooltip: 'Delete',
+                                          tooltip: l.tr('delete'),
                                           onPressed: () =>
                                               _deleteMember(m),
                                         ),
@@ -526,7 +560,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('Rows per page: '),
+                Text('${l.tr('rowsPerPage')}: '),
                 DropdownButton<int>(
                   value: _pageSize,
                   items: const [
@@ -553,7 +587,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
                         }
                       : null,
                 ),
-                Text('Page ${_currentPage + 1} of ${_totalPages < 1 ? 1 : _totalPages}'),
+                Text(l.trArgs('pageOf', {'current': '${_currentPage + 1}', 'total': '${_totalPages < 1 ? 1 : _totalPages}'})),
                 IconButton(
                   icon: const Icon(Icons.chevron_right),
                   onPressed: _currentPage < _totalPages - 1
@@ -572,6 +606,10 @@ class _MemberListScreenState extends State<MemberListScreen> {
   }
 }
 
+/// Form screen for creating or editing a [Member].
+///
+/// When [member] is null the form is in "create" mode; otherwise it pre-fills
+/// fields for editing the existing member.
 class MemberEditScreen extends StatefulWidget {
   final Member? member;
 
@@ -581,6 +619,7 @@ class MemberEditScreen extends StatefulWidget {
   State<MemberEditScreen> createState() => _MemberEditScreenState();
 }
 
+/// State for [MemberEditScreen]. Holds form controllers and submission logic.
 class _MemberEditScreenState extends State<MemberEditScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
@@ -616,6 +655,7 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
     super.dispose();
   }
 
+  /// Validates the form, then inserts a new member or updates the existing one.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -654,13 +694,13 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_isNew ? 'Member created' : 'Member saved')),
+        SnackBar(content: Text(_isNew ? AppLocalizations.of(context).tr('memberCreated') : AppLocalizations.of(context).tr('memberSaved'))),
       );
       Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context).trArgs('errorPrefix', {'error': '$e'}))),
         );
       }
     } finally {
@@ -678,9 +718,10 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
       return MemberEditScreen(member: routeMember);
     }
 
+    final l = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? 'Add Member' : 'Edit Member'),
+        title: Text(_isNew ? l.tr('addMember') : l.tr('editMember')),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -694,7 +735,7 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
                 children: [
                   if (!_isNew) ...[
                     Text(
-                      'Member #${_member!.memberNumber} (ID: ${_member!.id})',
+                      l.trArgs('memberInfo', {'number': '${_member!.memberNumber}', 'id': '${_member!.id}'}),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 16),
@@ -702,35 +743,35 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
                   TextFormField(
                     controller: _nameController,
                     autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Name'),
+                    decoration: InputDecoration(labelText: l.tr('name')),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                        v == null || v.trim().isEmpty ? l.tr('required') : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _emailController,
                     decoration:
-                        const InputDecoration(labelText: 'Email (optional)'),
+                        InputDecoration(labelText: l.tr('emailOptional')),
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _memberNumberController,
-                    decoration: const InputDecoration(
-                      labelText: 'Member number (auto-assigned if empty)',
+                    decoration: InputDecoration(
+                      labelText: l.tr('memberNumberLabel'),
                     ),
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
                   CheckboxListTile(
-                    title: const Text('Communication'),
+                    title: Text(l.tr('communicationLabel')),
                     value: _communication,
                     onChanged: (v) =>
                         setState(() => _communication = v ?? false),
                     controlAffinity: ListTileControlAffinity.leading,
                   ),
                   CheckboxListTile(
-                    title: const Text('Annual fee paid'),
+                    title: Text(l.tr('annualFeePaid')),
                     value: _annualFee,
                     onChanged: (v) =>
                         setState(() => _annualFee = v ?? false),
@@ -738,8 +779,8 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
                   ),
                   TextFormField(
                     controller: _notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes',
+                    decoration: InputDecoration(
+                      labelText: l.tr('notes'),
                       alignLabelWithHint: true,
                     ),
                     maxLines: 4,
@@ -757,13 +798,13 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2),
                                 )
-                              : Text(_isNew ? 'Create' : 'Save'),
+                              : Text(_isNew ? l.tr('create') : l.tr('save')),
                         ),
                       ),
                       const SizedBox(width: 12),
                       OutlinedButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
+                        child: Text(l.tr('cancel')),
                       ),
                     ],
                   ),
@@ -777,6 +818,8 @@ class _MemberEditScreenState extends State<MemberEditScreen> {
   }
 }
 
+/// A DataColumn header label that highlights on mouse hover.
+/// Uses [AppTheme.hoverColor] adapting to light/dark mode.
 class _HoverHeader extends StatefulWidget {
   final String text;
   const _HoverHeader({required this.text});

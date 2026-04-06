@@ -1,11 +1,28 @@
+/// Represents a registered (permanent) member of the BUS organization.
+/// Stored in the 'members' SQLite table.
 class Member {
+  /// Auto-incremented database primary key. Null when creating a new record.
   final int? id;
+
+  /// Full name of the member (required).
   final String name;
+
+  /// Optional email address of the member.
   final String? email;
+
+  /// Whether the member opted-in to receive communications (events/news).
   final bool communication;
+
+  /// Whether the annual membership fee has been paid.
   final bool annualFee;
+
+  /// Free-text notes about the member.
   final String notes;
+
+  /// Timestamp of when the member was registered.
   final DateTime? createdAt;
+
+  /// Unique sequential member number, auto-assigned if not provided.
   final int? memberNumber;
 
   Member({
@@ -19,6 +36,8 @@ class Member {
     this.memberNumber,
   });
 
+  /// Converts this Member to a Map for SQLite insertion/update.
+  /// Booleans are stored as 0/1 integers, dates as ISO 8601 strings.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -32,6 +51,7 @@ class Member {
     };
   }
 
+  /// Creates a Member from a SQLite row map.
   factory Member.fromMap(Map<String, dynamic> map) {
     return Member(
       id: map['id'] as int?,
@@ -47,6 +67,7 @@ class Member {
     );
   }
 
+  /// Returns a copy of this Member with the given fields replaced.
   Member copyWith({
     int? id,
     String? name,
@@ -70,11 +91,22 @@ class Member {
   }
 }
 
+/// Represents a daily (temporary/one-day) member of BUS.
+/// Stored in the 'daily_members' SQLite table.
 class DailyMember {
+  /// Auto-incremented database primary key. Null when creating a new record.
   final int? id;
+
+  /// Full name of the daily member (required).
   final String name;
+
+  /// Unique sequential daily member number, auto-assigned if not provided.
   final int? dailyMemberNumber;
+
+  /// Free-text notes about the daily member.
   final String notes;
+
+  /// Timestamp of when the daily member was registered.
   final DateTime? createdAt;
 
   DailyMember({
@@ -85,6 +117,7 @@ class DailyMember {
     this.createdAt,
   });
 
+  /// Converts this DailyMember to a Map for SQLite insertion/update.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -95,6 +128,7 @@ class DailyMember {
     };
   }
 
+  /// Creates a DailyMember from a SQLite row map.
   factory DailyMember.fromMap(Map<String, dynamic> map) {
     return DailyMember(
       id: map['id'] as int?,
@@ -107,6 +141,7 @@ class DailyMember {
     );
   }
 
+  /// Returns a copy of this DailyMember with the given fields replaced.
   DailyMember copyWith({
     int? id,
     String? name,
@@ -126,11 +161,23 @@ class DailyMember {
 
 // ─── Custom Table Definitions ───
 
+/// Defines a user-created custom table (e.g. Volunteers, Equipment).
+/// Metadata is stored in the 'custom_tables' SQLite table.
+/// The actual data table is dynamically created with a 'ct_' prefixed name.
 class CustomTableDef {
+  /// Auto-incremented database primary key.
   final int? id;
+
+  /// Human-readable display name for the table.
   final String tableName;
+
+  /// Sanitized SQLite table name (prefixed with 'ct_'). Auto-generated from tableName.
   final String dbTableName;
+
+  /// Timestamp of when the custom table was created.
   final DateTime? createdAt;
+
+  /// The column definitions that make up the table's structure.
   final List<CustomColumnDef> columns;
 
   CustomTableDef({
@@ -150,6 +197,8 @@ class CustomTableDef {
     };
   }
 
+  /// Creates a CustomTableDef from a SQLite row map.
+  /// [columns] should be loaded separately from 'custom_table_columns' table.
   factory CustomTableDef.fromMap(Map<String, dynamic> map, {List<CustomColumnDef> columns = const []}) {
     return CustomTableDef(
       id: map['id'] as int?,
@@ -179,11 +228,23 @@ class CustomTableDef {
   }
 }
 
+/// Defines a single column within a custom table.
+/// Stored in the 'custom_table_columns' SQLite table.
 class CustomColumnDef {
+  /// Auto-incremented database primary key.
   final int? id;
+
+  /// Foreign key referencing the parent CustomTableDef.
   final int? customTableId;
+
+  /// Human-readable column name.
   final String columnName;
-  final String columnType; // TEXT, INTEGER, REAL, BOOLEAN
+
+  /// Data type of the column. One of: 'TEXT', 'INTEGER', 'REAL', 'BOOLEAN'.
+  /// BOOLEAN is stored as INTEGER (0/1) in SQLite.
+  final String columnType;
+
+  /// Display order of this column (0-based).
   final int columnOrder;
 
   CustomColumnDef({
@@ -230,6 +291,8 @@ class CustomColumnDef {
     );
   }
 
+  /// Returns a sanitized, SQLite-safe column name derived from [columnName].
+  /// Converts to lowercase, replaces special chars with underscores.
   String get dbColumnName {
     return columnName
         .toLowerCase()
@@ -238,6 +301,8 @@ class CustomColumnDef {
         .replaceAll(RegExp(r'^_|_$'), '');
   }
 
+  /// Maps [columnType] to the corresponding SQLite type.
+  /// BOOLEAN becomes INTEGER (stored as 0/1).
   String get sqlType {
     switch (columnType) {
       case 'INTEGER':
@@ -254,10 +319,19 @@ class CustomColumnDef {
 
 // ─── App User ───
 
+/// Represents an application user (admin or normal) for authentication.
+/// Stored in the 'users' SQLite table.
 class AppUser {
+  /// Auto-incremented database primary key.
   final int? id;
+
+  /// Unique login username.
   final String username;
+
+  /// Password hash (currently stored as plain text — should be hashed in production).
   final String? passwordHash;
+
+  /// Whether this user has admin privileges. Maps to 'is_staff' column in DB.
   final bool isAdmin;
 
   AppUser({

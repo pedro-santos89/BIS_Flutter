@@ -1,18 +1,29 @@
 import 'package:sqflite/sqflite.dart';
 import 'models.dart';
 
+/// Singleton helper for all SQLite database operations.
+/// Handles schema creation/migration and provides CRUD methods for:
+/// - Members, Daily Members, Users, Custom Tables, Reports.
+///
+/// Usage: DatabaseHelper.instance.getMembers(...)
 class DatabaseHelper {
+  /// Singleton instance — use DatabaseHelper.instance to access.
   static final DatabaseHelper instance = DatabaseHelper._init();
+
+  /// Cached database reference. Initialized lazily on first access.
   static Database? _database;
 
   DatabaseHelper._init();
 
+  /// Returns the database, initializing it on first call.
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('bis.db');
     return _database!;
   }
 
+  /// Opens (or creates) the SQLite database file.
+  /// [version] triggers onCreate/onUpgrade callbacks for schema management.
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = '$dbPath/$filePath';
@@ -24,6 +35,7 @@ class DatabaseHelper {
     );
   }
 
+  /// Creates all tables for a fresh database (version 1 + version 2 tables).
   Future<void> _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE members (
@@ -69,12 +81,15 @@ class DatabaseHelper {
     await _createV2Tables(db);
   }
 
+  /// Handles schema migrations when the DB version changes.
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createV2Tables(db);
     }
   }
 
+  /// Creates v2 tables: custom_tables and custom_table_columns.
+  /// Called on fresh installs and when upgrading from v1.
   Future<void> _createV2Tables(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS custom_tables (
@@ -99,6 +114,8 @@ class DatabaseHelper {
 
   // ─── Members ───
 
+  /// Inserts a new member. Auto-assigns the first available member_number
+  /// (gap-filling) if not already set.
   Future<Member> insertMember(Member member) async {
     final db = await database;
 
@@ -134,11 +151,16 @@ class DatabaseHelper {
     return member.copyWith(id: id, memberNumber: memberNumber);
   }
 
+  /// Fetches members with server-side pagination, search, and sorting.
+  /// [searchBy] can be 'name', 'email', or 'member_number'.
+  /// [orderBy] is the DB column name to sort by.
   Future<List<Member>> getMembers({
     String? search,
     String searchBy = 'name',
     int limit = 25,
     int offset = 0,
+    String orderBy = 'member_number',
+    bool ascending = true,
   }) async {
     final db = await database;
     String where = '';
@@ -160,13 +182,16 @@ class DatabaseHelper {
       }
     }
 
+    final dir = ascending ? 'ASC' : 'DESC';
     final result = await db.rawQuery(
-      'SELECT * FROM members $where ORDER BY member_number ASC LIMIT ? OFFSET ?',
+      'SELECT * FROM members $where ORDER BY $orderBy $dir LIMIT ? OFFSET ?',
       [...args, limit, offset],
     );
     return result.map((m) => Member.fromMap(m)).toList();
   }
 
+  /// Returns the total count of members matching the search criteria.
+  /// Used for pagination calculations.
   Future<int> getMemberCount({String? search, String searchBy = 'name'}) async {
     final db = await database;
     String where = '';
@@ -195,6 +220,7 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Retrieves a single member by [id], or null if not found.
   Future<Member?> getMember(int id) async {
     final db = await database;
     final result = await db.query('members', where: 'id = ?', whereArgs: [id]);
@@ -214,6 +240,7 @@ class DatabaseHelper {
     await db.delete('members', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Deletes multiple members by their IDs. Returns the number deleted.
   Future<int> deleteMembers(List<int> ids) async {
     if (ids.isEmpty) return 0;
     final db = await database;
@@ -229,6 +256,7 @@ class DatabaseHelper {
     return await db.delete('members');
   }
 
+  /// Returns all members ordered by member_number. Used for CSV/PDF export.
   Future<List<Member>> getAllMembers() async {
     final db = await database;
     final result = await db.query('members', orderBy: 'member_number ASC');
@@ -237,6 +265,7 @@ class DatabaseHelper {
 
   // ─── Daily Members ───
 
+  /// Inserts a daily member. Auto-assigns the next daily_member_number if not set.
   Future<DailyMember> insertDailyMember(DailyMember member) async {
     final db = await database;
 
@@ -259,16 +288,18 @@ class DatabaseHelper {
     return member.copyWith(id: id, dailyMemberNumber: dailyNumber);
   }
 
+  /// Fetches daily members with server-side pagination and sorting.
   Future<List<DailyMember>> getDailyMembers({
     int limit = 25,
     int offset = 0,
+    String orderBy = 'daily_member_number',
+    bool ascending = true,
   }) async {
     final db = await database;
-    final result = await db.query(
-      'daily_members',
-      orderBy: 'created_at DESC',
-      limit: limit,
-      offset: offset,
+    final dir = ascending ? 'ASC' : 'DESC';
+    final result = await db.rawQuery(
+      'SELECT * FROM daily_members ORDER BY $orderBy $dir LIMIT ? OFFSET ?',
+      [limit, offset],
     );
     return result.map((m) => DailyMember.fromMap(m)).toList();
   }
@@ -335,6 +366,7 @@ class DatabaseHelper {
 
   // ─── Authentication ───
 
+  /// Simple username/password check. Returns true if credentials match.
   Future<bool> authenticate(String username, String password) async {
     final db = await database;
     final result = await db.query(
@@ -345,6 +377,7 @@ class DatabaseHelper {
     return result.isNotEmpty;
   }
 
+  /// Authenticates and returns the full AppUser object (includes isAdmin flag).
   Future<AppUser?> authenticateUser(String username, String password) async {
     final db = await database;
     final result = await db.query(
@@ -358,6 +391,8 @@ class DatabaseHelper {
 
   // ─── Reports ───
 
+  /// Returns registration counts grouped by date for the given [table]
+  /// ('members' or 'daily_members') within the [from]–[to] date range.
   Future<List<Map<String, dynamic>>> getRegistrationReport({
     required String table,
     required DateTime from,
@@ -378,6 +413,9 @@ class DatabaseHelper {
 
   // ─── Bulk import ───
 
+  /// Imports members from parsed CSV rows.
+  /// Matches by ID for updates; creates new records otherwise.
+  /// Returns counts: {created, updated, errors}.
   Future<Map<String, int>> importMembersFromCsv(
     List<Map<String, dynamic>> rows,
   ) async {
@@ -442,6 +480,7 @@ class DatabaseHelper {
     return {'created': created, 'updated': updated, 'errors': errors};
   }
 
+  /// Imports daily members from parsed CSV rows. Same logic as importMembersFromCsv.
   Future<Map<String, int>> importDailyMembersFromCsv(
     List<Map<String, dynamic>> rows,
   ) async {
@@ -500,10 +539,13 @@ class DatabaseHelper {
     return {'created': created, 'updated': updated, 'errors': errors};
   }
 
+  /// Parses common boolean string representations to bool.
   bool _parseBool(String value) {
     return ['true', '1', 'yes'].contains(value.toLowerCase());
   }
 
+  /// Tries to parse a date string in multiple formats:
+  /// DD/MM/YYYY HH:MM, DD-MM-YYYY HH:MM:SS, and ISO 8601.
   DateTime? _parseDateString(String dateStr) {
     // Try DD/MM/YYYY HH:MM
     try {
@@ -545,6 +587,8 @@ class DatabaseHelper {
 
   // ─── Custom Tables ───
 
+  /// Sanitizes a human-readable table name into a valid SQLite table name.
+  /// Prefixes with 'ct_' to avoid conflicts with built-in tables.
   String _sanitizeTableName(String name) {
     final sanitized = name
         .toLowerCase()
@@ -554,6 +598,8 @@ class DatabaseHelper {
     return 'ct_$sanitized';
   }
 
+  /// Creates a new custom table: saves metadata in custom_tables/custom_table_columns,
+  /// then creates the actual SQLite data table with the defined columns.
   Future<CustomTableDef> createCustomTable(
     String tableName,
     List<CustomColumnDef> columns,
@@ -598,6 +644,7 @@ class DatabaseHelper {
     );
   }
 
+  /// Returns all custom tables with their column definitions.
   Future<List<CustomTableDef>> getCustomTables() async {
     final db = await database;
     final tables = await db.query('custom_tables', orderBy: 'table_name ASC');
@@ -629,6 +676,8 @@ class DatabaseHelper {
         columns: cols.map((c) => CustomColumnDef.fromMap(c)).toList());
   }
 
+  /// Updates a custom table's name and column structure.
+  /// WARNING: This drops and recreates the data table, deleting all existing rows.
   Future<void> updateCustomTable(
     int tableId,
     String newName,
@@ -669,6 +718,7 @@ class DatabaseHelper {
     ''');
   }
 
+  /// Deletes a custom table: drops the data table and removes metadata.
   Future<void> deleteCustomTable(int tableId) async {
     final db = await database;
     final existing = await getCustomTable(tableId);
@@ -682,18 +732,22 @@ class DatabaseHelper {
 
   // ─── Custom Table Data CRUD ───
 
+  /// Inserts a row into a dynamic custom table. Automatically sets created_at.
   Future<int> insertCustomRow(String dbTableName, Map<String, dynamic> data) async {
     final db = await database;
     data['created_at'] = DateTime.now().toIso8601String();
     return await db.insert(dbTableName, data);
   }
 
+  /// Fetches rows from a custom table with pagination, optional search, and sorting.
   Future<List<Map<String, dynamic>>> getCustomRows({
     required String dbTableName,
     String? search,
     String? searchColumn,
     int limit = 25,
     int offset = 0,
+    String orderBy = 'id',
+    bool ascending = false,
   }) async {
     final db = await database;
     String where = '';
@@ -704,8 +758,9 @@ class DatabaseHelper {
       args = ['%$search%'];
     }
 
+    final dir = ascending ? 'ASC' : 'DESC';
     final result = await db.rawQuery(
-      'SELECT * FROM $dbTableName $where ORDER BY id DESC LIMIT ? OFFSET ?',
+      'SELECT * FROM $dbTableName $where ORDER BY $orderBy $dir LIMIT ? OFFSET ?',
       [...args, limit, offset],
     );
     return result;
@@ -764,6 +819,8 @@ class DatabaseHelper {
     return await db.delete(dbTableName);
   }
 
+  /// Imports rows into a custom table from parsed CSV data.
+  /// Converts values according to each column's type definition.
   Future<Map<String, int>> importCustomRowsFromCsv(
     String dbTableName,
     List<CustomColumnDef> columns,
@@ -800,6 +857,7 @@ class DatabaseHelper {
 
   // ─── User Management ───
 
+  /// Returns all app users sorted by username.
   Future<List<AppUser>> getUsers() async {
     final db = await database;
     final result = await db.query('users', orderBy: 'username ASC');

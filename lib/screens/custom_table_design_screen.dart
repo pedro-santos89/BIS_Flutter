@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../database_helper.dart';
+import '../l10n.dart';
 import '../models.dart';
 
+/// Form screen for creating a new custom table or editing an existing one.
+/// Allows setting the table name and defining columns with types
+/// (Text, Integer, Decimal, Yes/No).
 class CustomTableDesignScreen extends StatefulWidget {
   const CustomTableDesignScreen({super.key});
 
@@ -13,8 +17,12 @@ class CustomTableDesignScreen extends StatefulWidget {
 class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
   final _formKey = GlobalKey<FormState>();
   final _tableNameController = TextEditingController();
+
+  /// Mutable list of column entries the user is defining.
   final List<_ColumnEntry> _columns = [];
   bool _isSubmitting = false;
+
+  /// Non-null when editing an existing table (passed via route arguments).
   CustomTableDef? _existing;
   bool _initialized = false;
 
@@ -49,6 +57,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
     super.dispose();
   }
 
+  /// Appends a new empty column entry to the list.
   void _addColumn() {
     setState(() {
       _columns.add(_ColumnEntry(
@@ -58,6 +67,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
     });
   }
 
+  /// Removes a column at [index]; prevents removing the last column.
   void _removeColumn(int index) {
     if (_columns.length <= 1) return;
     setState(() {
@@ -66,6 +76,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
     });
   }
 
+  /// Validates the form, then creates or updates the custom table in the DB.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -97,7 +108,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context).trArgs('errorPrefix', {'error': e.toString()}))),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -108,10 +119,11 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
   Widget build(BuildContext context) {
     final isNew = _existing == null;
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isNew ? 'Create Custom Table' : 'Edit Table Structure'),
+        title: Text(isNew ? l.tr('createCustomTable') : l.tr('editTableStructure')),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -124,7 +136,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    isNew ? 'New Custom Table' : 'Edit "${_existing!.tableName}"',
+                    isNew ? l.tr('newCustomTable') : l.trArgs('editTableName', {'name': _existing!.tableName}),
                     style: theme.textTheme.headlineMedium,
                     textAlign: TextAlign.center,
                   ),
@@ -138,8 +150,8 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.orange),
                       ),
-                      child: const Text(
-                        'Warning: Editing the table structure will delete all existing data in this table.',
+                      child: Text(
+                        l.tr('editWarning'),
                         style: TextStyle(color: Colors.orange),
                         textAlign: TextAlign.center,
                       ),
@@ -147,23 +159,23 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                   TextFormField(
                     controller: _tableNameController,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Table Name',
-                      hintText: 'e.g. Volunteers, Equipment, Events',
+                    decoration: InputDecoration(
+                      labelText: l.tr('tableName'),
+                      hintText: l.tr('tableNameHint'),
                       prefixIcon: Icon(Icons.table_chart),
                     ),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                        v == null || v.trim().isEmpty ? l.tr('required') : null,
                   ),
                   const SizedBox(height: 24),
                   Row(
                     children: [
-                      Text('Columns',
+                      Text(l.tr('columns'),
                           style: theme.textTheme.titleMedium),
                       const Spacer(),
                       TextButton.icon(
                         icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add Column'),
+                        label: Text(l.tr('addColumn')),
                         onPressed: _addColumn,
                       ),
                     ],
@@ -184,13 +196,13 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                             flex: 3,
                             child: TextFormField(
                               controller: col.nameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Column Name',
+                              decoration: InputDecoration(
+                                labelText: l.tr('columnName'),
                                 isDense: true,
                               ),
                               validator: (v) =>
                                   v == null || v.trim().isEmpty
-                                      ? 'Required'
+                                      ? l.tr('required')
                                       : null,
                             ),
                           ),
@@ -199,20 +211,20 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                             flex: 2,
                             child: DropdownButtonFormField<String>(
                               initialValue: col.type,
-                              decoration: const InputDecoration(
-                                labelText: 'Type',
+                              decoration: InputDecoration(
+                                labelText: l.tr('type'),
                                 isDense: true,
                               ),
-                              items: const [
+                              items: [
                                 DropdownMenuItem(
-                                    value: 'TEXT', child: Text('Text')),
+                                    value: 'TEXT', child: Text(l.tr('typeText'))),
                                 DropdownMenuItem(
-                                    value: 'INTEGER', child: Text('Integer')),
+                                    value: 'INTEGER', child: Text(l.tr('typeInteger'))),
                                 DropdownMenuItem(
-                                    value: 'REAL', child: Text('Decimal')),
+                                    value: 'REAL', child: Text(l.tr('typeDecimal'))),
                                 DropdownMenuItem(
                                     value: 'BOOLEAN',
-                                    child: Text('Yes/No')),
+                                    child: Text(l.tr('typeYesNo'))),
                               ],
                               onChanged: (v) {
                                 setState(() => col.type = v ?? 'TEXT');
@@ -223,7 +235,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                           IconButton(
                             icon: const Icon(Icons.remove_circle_outline,
                                 color: Colors.red, size: 20),
-                            tooltip: 'Remove column',
+                            tooltip: l.tr('removeColumn'),
                             onPressed: _columns.length > 1
                                 ? () => _removeColumn(i)
                                 : null,
@@ -235,7 +247,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
                   const SizedBox(height: 24),
                   FilledButton.icon(
                     icon: Icon(isNew ? Icons.add : Icons.save),
-                    label: Text(isNew ? 'Create Table' : 'Save Changes'),
+                    label: Text(isNew ? l.tr('create') : l.tr('saveChanges')),
                     onPressed: _isSubmitting ? null : _save,
                   ),
                 ],
@@ -248,6 +260,7 @@ class _CustomTableDesignScreenState extends State<CustomTableDesignScreen> {
   }
 }
 
+/// Mutable model for a column being edited in the design form.
 class _ColumnEntry {
   final TextEditingController nameController;
   String type;

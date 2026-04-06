@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../database_helper.dart';
+import '../l10n.dart';
 
+/// Displays registration count reports for members and daily members
+/// within a user-selected date range, with quick-range shortcut presets.
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
 
@@ -11,12 +13,18 @@ class ReportScreen extends StatefulWidget {
 }
 
 class _ReportScreenState extends State<ReportScreen> {
+  /// Start of the report date range (defaults to today at midnight).
   DateTime _from = DateTime.now().copyWith(hour: 0, minute: 0, second: 0);
+
+  /// End of the report date range (defaults to now).
   DateTime _to = DateTime.now();
   bool _loading = false;
 
+  /// Per-date registration counts for members and daily members.
   List<Map<String, dynamic>> _memberReport = [];
   List<Map<String, dynamic>> _dailyMemberReport = [];
+
+  /// Aggregated totals across the selected date range.
   int _memberTotal = 0;
   int _dailyMemberTotal = 0;
 
@@ -26,6 +34,8 @@ class _ReportScreenState extends State<ReportScreen> {
     _loadReport();
   }
 
+  /// Fetches registration reports for both members and daily members
+  /// from the database for the current [_from]..[_to] range.
   Future<void> _loadReport() async {
     setState(() => _loading = true);
     final memberData = await DatabaseHelper.instance.getRegistrationReport(
@@ -53,6 +63,7 @@ class _ReportScreenState extends State<ReportScreen> {
     });
   }
 
+  /// Opens a date picker to update either the start or end of the range.
   Future<void> _pickDate(bool isFrom) async {
     final picked = await showDatePicker(
       context: context,
@@ -77,11 +88,12 @@ class _ReportScreenState extends State<ReportScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final dateFmt = DateFormat('dd-MM-yyyy');
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Registrations Report',
-            style: GoogleFonts.oswald()),
+        title: Text(l.tr('registrationsReport'),
+            style: const TextStyle(fontFamily: 'Oswald')),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -96,9 +108,9 @@ class _ReportScreenState extends State<ReportScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: [
-                          Text('Period: ',
-                              style: GoogleFonts.oswald(
-                                textStyle: theme.textTheme.bodyLarge,
+                          Text('${l.tr('period')}: ',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontFamily: 'Oswald',
                                 fontWeight: FontWeight.w600,
                               )),
                           const SizedBox(width: 8),
@@ -109,7 +121,7 @@ class _ReportScreenState extends State<ReportScreen> {
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Text('to',
+                            child: Text(l.tr('to'),
                                 style: theme.textTheme.bodyMedium),
                           ),
                           OutlinedButton.icon(
@@ -120,7 +132,7 @@ class _ReportScreenState extends State<ReportScreen> {
                           const SizedBox(width: 12),
                           // Quick presets
                           PopupMenuButton<String>(
-                            tooltip: 'Quick range',
+                            tooltip: l.tr('quickRange'),
                             icon: const Icon(Icons.tune, size: 20),
                             onSelected: (value) {
                               final now = DateTime.now();
@@ -145,12 +157,12 @@ class _ReportScreenState extends State<ReportScreen> {
                               });
                               _loadReport();
                             },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(value: 'today', child: Text('Today')),
-                              PopupMenuItem(value: 'week', child: Text('Last 7 days')),
-                              PopupMenuItem(value: 'month', child: Text('This month')),
-                              PopupMenuItem(value: 'year', child: Text('This year')),
-                              PopupMenuItem(value: 'all', child: Text('All time')),
+                            itemBuilder: (_) => [
+                              PopupMenuItem(value: 'today', child: Text(l.tr('today'))),
+                              PopupMenuItem(value: 'week', child: Text(l.tr('last7Days'))),
+                              PopupMenuItem(value: 'month', child: Text(l.tr('thisMonth'))),
+                              PopupMenuItem(value: 'year', child: Text(l.tr('thisYear'))),
+                              PopupMenuItem(value: 'all', child: Text(l.tr('allTime'))),
                             ],
                           ),
                         ],
@@ -161,9 +173,10 @@ class _ReportScreenState extends State<ReportScreen> {
 
                   // Members report
                   _buildReportSection(
+                    l: l,
                     theme: theme,
                     isDark: isDark,
-                    title: 'Members',
+                    title: l.tr('members'),
                     total: _memberTotal,
                     data: _memberReport,
                   ),
@@ -171,9 +184,10 @@ class _ReportScreenState extends State<ReportScreen> {
 
                   // Daily members report
                   _buildReportSection(
+                    l: l,
                     theme: theme,
                     isDark: isDark,
-                    title: 'Daily Members',
+                    title: l.tr('dailyMembers'),
                     total: _dailyMemberTotal,
                     data: _dailyMemberReport,
                   ),
@@ -183,7 +197,10 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
+  /// Builds a titled section showing a DataTable of date/count rows
+  /// for a given report category (members or daily members).
   Widget _buildReportSection({
+    required AppLocalizations l,
     required ThemeData theme,
     required bool isDark,
     required String title,
@@ -194,9 +211,9 @@ class _ReportScreenState extends State<ReportScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '$title — $total new registration${total != 1 ? 's' : ''}',
-          style: GoogleFonts.oswald(
-            textStyle: theme.textTheme.headlineSmall,
+          l.trArgs('registrationsTitle', {'title': title, 'total': '$total'}),
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontFamily: 'Oswald',
           ),
         ),
         const SizedBox(height: 8),
@@ -204,16 +221,16 @@ class _ReportScreenState extends State<ReportScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              'No registrations in this period.',
+              l.tr('noRegistrations'),
               style: theme.textTheme.bodyMedium,
             ),
           )
         else
           Card(
             child: DataTable(
-              columns: const [
-                DataColumn(label: Text('Date')),
-                DataColumn(label: Text('New Registrations'), numeric: true),
+              columns: [
+                DataColumn(label: Text(l.tr('date'))),
+                DataColumn(label: Text(l.tr('newRegistrations')), numeric: true),
               ],
               rows: data.map((row) {
                 return DataRow(

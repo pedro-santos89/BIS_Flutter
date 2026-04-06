@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../providers.dart';
 import '../theme.dart';
+import '../l10n.dart';
 
+/// Public landing page of the BIS app.
+///
+/// Shows the welcome title, subtitle, description, and two CTA buttons
+/// for member registration and daily member registration.
+/// The [AppBar] includes theme/locale toggles, text-size menu, and
+/// conditional admin/login navigation links.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -11,6 +17,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = context.watch<ThemeProvider>().isDark;
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: _buildAppBar(context, isDark),
@@ -21,34 +28,38 @@ class HomeScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const SizedBox(height: 40),
-              Text(
-                'Welcome to bis',
-                style: theme.textTheme.headlineLarge?.copyWith(
-                  fontFamily: AppTheme.headlineFont,
-                  fontSize: 144,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w100,
+              MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+                child: Text(
+                  l.tr('welcomeTitle'),
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    fontFamily: AppTheme.headlineFont,
+                    fontSize: 144,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w100,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                '(BUS Information System)',
-                style: GoogleFonts.oswald(
-                  textStyle: theme.textTheme.bodySmall?.copyWith(fontSize: 14),
+                l.tr('welcomeSubtitle'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 14,
+                  fontFamily: 'Oswald',
                 ),
               ),
               const SizedBox(height: 16),
               Text(
-                'Manage members and registrations.',
-                style: GoogleFonts.oswald(
-                  textStyle: theme.textTheme.bodyLarge,
+                l.tr('welcomeDescription'),
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontFamily: 'Oswald',
                 ),
               ),
               const SizedBox(height: 48),
               SizedBox(
                 width: 320,
                 child: _CtaButton(
-                  label: 'Member Registration',
+                  label: l.tr('memberRegistration'),
                   isDark: isDark,
                   onPressed: () =>
                       Navigator.pushNamed(context, '/register'),
@@ -58,7 +69,7 @@ class HomeScreen extends StatelessWidget {
               SizedBox(
                 width: 320,
                 child: _CtaButton(
-                  label: 'Daily Member Registration',
+                  label: l.tr('dailyMemberRegistration'),
                   isDark: isDark,
                   onPressed: () =>
                       Navigator.pushNamed(context, '/register-daily'),
@@ -72,11 +83,14 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// Builds the top app bar with the "bIS" logo, theme/locale toggles,
+  /// text-size menu, and auth-aware navigation links (admin area / logout).
   PreferredSizeWidget _buildAppBar(BuildContext context, bool isDark) {
     final themeProvider = context.read<ThemeProvider>();
     final authProvider = context.watch<AuthProvider>();
     final primary = Theme.of(context).colorScheme.primary;
     final hover = AppTheme.hoverColor(isDark);
+    final l = AppLocalizations.of(context);
 
     return AppBar(
       title: _HoverText(
@@ -87,19 +101,28 @@ class HomeScreen extends StatelessWidget {
         onTap: () => Navigator.pushNamedAndRemoveUntil(context, '/', (r) => false),
       ),
       actions: [
+        _TextSizeMenuButton(primary: primary),
         IconButton(
           icon: Icon(isDark ? Icons.wb_sunny : Icons.nightlight_round),
-          tooltip: isDark ? 'Switch to Light' : 'Switch to Dark',
+          tooltip: isDark ? l.tr('switchToLight') : l.tr('switchToDark'),
           onPressed: () => themeProvider.toggleTheme(),
+        ),
+        IconButton(
+          icon: Text(
+            themeProvider.locale.languageCode.toUpperCase(),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: primary),
+          ),
+          tooltip: themeProvider.locale.languageCode == 'pt' ? 'English' : 'Português',
+          onPressed: () => themeProvider.toggleLocale(),
         ),
         if (authProvider.isAuthenticated) ...[
           _NavLinkButton(
-            text: 'Admin area',
+            text: l.tr('adminArea'),
             isDark: isDark,
             onPressed: () => Navigator.pushNamed(context, '/admin'),
           ),
           _NavLinkButton(
-            text: 'Logout',
+            text: l.tr('logout'),
             isDark: isDark,
             onPressed: () {
               authProvider.logout();
@@ -112,7 +135,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ] else
           _NavLinkButton(
-            text: 'Admin area',
+            text: l.tr('adminArea'),
             isDark: isDark,
             onPressed: () => Navigator.pushNamed(context, '/login'),
           ),
@@ -165,6 +188,7 @@ class _CtaButton extends StatefulWidget {
 }
 
 class _CtaButtonState extends State<_CtaButton> {
+  /// Tracks mouse hover to drive animated lift and color change.
   bool _hovering = false;
 
   @override
@@ -184,12 +208,95 @@ class _CtaButtonState extends State<_CtaButton> {
             backgroundColor: _hovering ? hoverBg : primary,
             foregroundColor: _hovering ? (widget.isDark ? Colors.black : Colors.white) : (widget.isDark ? Colors.black : AppTheme.lightBgLight),
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            textStyle: GoogleFonts.oswald(fontSize: 16, fontWeight: FontWeight.w600),
+            textStyle: const TextStyle(fontFamily: 'Oswald', fontSize: 16, fontWeight: FontWeight.w600),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             elevation: _hovering ? 8 : 2,
           ),
           onPressed: widget.onPressed,
           child: Text(widget.label),
+        ),
+      ),
+    );
+  }
+}
+
+/// Text-size dropdown button using MenuAnchor – stays open after each tap.
+class _TextSizeMenuButton extends StatefulWidget {
+  final Color primary;
+  const _TextSizeMenuButton({required this.primary});
+
+  @override
+  State<_TextSizeMenuButton> createState() => _TextSizeMenuButtonState();
+}
+
+class _TextSizeMenuButtonState extends State<_TextSizeMenuButton> {
+  /// Controller that keeps the dropdown open after each tap via
+  /// [addPostFrameCallback] re-open trick.
+  final MenuController _menuController = MenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    final tp = context.watch<ThemeProvider>();
+    final scale = tp.textScale;
+    final primary = widget.primary;
+
+    return MenuAnchor(
+      controller: _menuController,
+      menuChildren: [
+        MenuItemButton(
+          onPressed: scale < 2.0
+              ? () {
+                  tp.increaseTextScale();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _menuController.open();
+                  });
+                }
+              : null,
+          leadingIcon: const Icon(Icons.text_increase, size: 20),
+          child: Text(AppLocalizations.of(context).tr('textSizeIncrease')),
+        ),
+        MenuItemButton(
+          onPressed: () {
+            tp.resetTextScale();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _menuController.open();
+            });
+          },
+          leadingIcon: const Icon(Icons.refresh, size: 20),
+          child: Text(AppLocalizations.of(context).trArgs('textSizeReset', {'percent': '${tp.textScalePercent}'})),
+        ),
+        MenuItemButton(
+          onPressed: scale > 1.0
+              ? () {
+                  tp.decreaseTextScale();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _menuController.open();
+                  });
+                }
+              : null,
+          leadingIcon: const Icon(Icons.text_decrease, size: 20),
+          child: Text(AppLocalizations.of(context).tr('textSizeDecrease')),
+        ),
+      ],
+      child: InkWell(
+        onTap: () {
+          if (_menuController.isOpen) {
+            _menuController.close();
+          } else {
+            _menuController.open();
+          }
+        },
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('a', style: TextStyle(fontSize: 12, color: primary, fontWeight: FontWeight.bold)),
+              Text('A', style: TextStyle(fontSize: 18, color: primary, fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
       ),
     );
@@ -217,6 +324,7 @@ class _HoverText extends StatefulWidget {
 }
 
 class _HoverTextState extends State<_HoverText> {
+  /// Tracks mouse enter/exit to animate text color via [AnimatedDefaultTextStyle].
   bool _hovering = false;
 
   @override

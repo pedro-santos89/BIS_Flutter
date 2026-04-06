@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
 
+/// Defines the dark and light ThemeData for the BIS app.
+/// Colors and styling mirror the Django-based BIS webapp.
 class AppTheme {
   // ─── Font families (matching Django BIS webapp) ───
-  static const String headlineFont = 'Rowsky';  // Custom font for "Welcome to bis"
-  // Oswald via google_fonts for body/subheadline/buttons
+  /// Custom display font used exclusively for the "Welcome to bis" headline.
+  static const String headlineFont = 'Rowsky';
+  // Oswald is the default body/button font, set via fontFamily in ThemeData.
 
-  // ─── Purple accent colors (matching Django BIS theme) ───
+  // ─── Dark theme color palette ───
+  /// Main accent color for dark theme (buttons, links, icons).
   static const Color primaryPurple = Color(0xFFBB86FC);
+  /// Darker purple used as secondary/accent color.
   static const Color darkPurple = Color(0xFF8D33FA);
+  /// Gold color used for hover highlights in dark theme.
   static const Color gold = Color(0xFFFFD700);
+  /// Hover state color for buttons in dark theme.
   static const Color darkPurpleHover = Color(0xFF9966CC);
 
+  /// The dark theme ThemeData. Uses purple/gold palette on black background.
+  /// Includes custom styles for buttons, inputs, data tables, checkboxes, etc.
   static ThemeData darkTheme = ThemeData(
+    fontFamily: 'Oswald',
     brightness: Brightness.dark,
     primaryColor: primaryPurple,
     scaffoldBackgroundColor: Colors.black,
@@ -151,21 +161,30 @@ class AppTheme {
     iconTheme: const IconThemeData(color: primaryPurple),
   );
 
-  // ─── Light theme colors (matching Django BIS light theme) ───
-  static const Color lightPrimary = Color(0xFFEB3502);      // deep orange-red
-  static const Color lightPrimaryLighter = Color(0xFFFF6719); // lighter orange
-  static const Color lightPrimaryDarker = Color(0xFF9C3100); // darker orange
-  static const Color lightAccent = Color(0xFF00ADB5);        // teal
-  static const Color lightBg = Color(0xFFEDEBDE);            // warm light gray bg
-  static const Color lightBgLight = Color(0xFFFFFEF8);       // card/surface bg
-  static const Color lightBodyText = Color(0xFF521C0D);      // body text
+  // ─── Light theme color palette ───
+  /// Main accent for light theme — deep orange-red.
+  static const Color lightPrimary = Color(0xFFEB3502);
+  /// Lighter orange used as secondary color.
+  static const Color lightPrimaryLighter = Color(0xFFFF6719);
+  /// Darker orange for hover states and secondary text.
+  static const Color lightPrimaryDarker = Color(0xFF9C3100);
+  /// Teal accent used for hover highlights in light theme.
+  static const Color lightAccent = Color(0xFF00ADB5);
+  /// Warm light gray used as scaffold background.
+  static const Color lightBg = Color(0xFFEDEBDE);
+  /// Off-white used for cards and surface elements.
+  static const Color lightBgLight = Color(0xFFFFFEF8);
+  /// Dark brown text color for body text in light theme.
+  static const Color lightBodyText = Color(0xFF521C0D);
 
   /// Returns the hover color for interactive text elements based on theme.
   static Color hoverColor(bool isDark) => isDark ? gold : lightAccent;
   /// Returns the button hover bg based on theme.
   static Color buttonHoverBg(bool isDark) => isDark ? darkPurpleHover : lightPrimaryDarker;
 
+  /// The light theme ThemeData. Uses orange-red/teal palette on warm gray background.
   static ThemeData lightTheme = ThemeData(
+    fontFamily: 'Oswald',
     brightness: Brightness.light,
     primaryColor: lightPrimary,
     scaffoldBackgroundColor: lightBg,

@@ -3,8 +3,13 @@ import 'package:intl/intl.dart';
 import '../database_helper.dart';
 import '../models.dart';
 import '../export_helper.dart';
+import '../l10n.dart';
 import '../theme.dart';
 
+/// Screen that displays a paginated, sortable DataTable of all [DailyMember] records.
+///
+/// Supports multi-select, bulk delete, CSV/PDF export, and CSV import.
+/// Unlike [MemberListScreen], this screen has no search bar.
 class DailyMemberListScreen extends StatefulWidget {
   const DailyMemberListScreen({super.key});
 
@@ -12,15 +17,36 @@ class DailyMemberListScreen extends StatefulWidget {
   State<DailyMemberListScreen> createState() => _DailyMemberListScreenState();
 }
 
+/// State for [DailyMemberListScreen]. Manages pagination, sorting, and
+/// row selection for the daily members DataTable.
 class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
+  /// Current page of daily members returned from the database.
   List<DailyMember> _members = [];
+
+  /// Total daily member count (for pagination calculation).
   int _totalCount = 0;
+
+  /// Zero-based current page index.
   int _currentPage = 0;
+
+  /// Number of rows per page.
   int _pageSize = 25;
   bool _loading = true;
+
+  /// IDs of rows currently selected via checkboxes (for bulk actions).
   final Set<int> _selectedIds = {};
+
+  /// Index of the DataColumn currently sorted (maps to [_columnDbNames]).
   int _sortColumnIndex = 0;
   bool _sortAscending = true;
+
+  /// Database column name used in the ORDER BY clause.
+  String _sortColumn = 'daily_member_number';
+
+  /// Maps DataColumn display index to the corresponding DB column name.
+  static const _columnDbNames = [
+    'daily_member_number', 'name', 'notes', 'id', 'created_at',
+  ];
 
   @override
   void initState() {
@@ -28,11 +54,15 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
     _loadMembers();
   }
 
+  /// Fetches one page of daily members from the database using the current
+  /// sort and pagination state. Clears selection after loading.
   Future<void> _loadMembers() async {
     setState(() => _loading = true);
     final members = await DatabaseHelper.instance.getDailyMembers(
       limit: _pageSize,
       offset: _currentPage * _pageSize,
+      orderBy: _sortColumn,
+      ascending: _sortAscending,
     );
     final count = await DatabaseHelper.instance.getDailyMemberCount();
     setState(() {
@@ -45,23 +75,15 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
 
   int get _totalPages => (_totalCount / _pageSize).ceil();
 
+  /// Callback for DataColumn.onSort — updates sort state and reloads from page 0.
   void _sort(int columnIndex, bool ascending) {
     setState(() {
       _sortColumnIndex = columnIndex;
       _sortAscending = ascending;
-      _members.sort((a, b) {
-        Comparable aVal, bVal;
-        switch (columnIndex) {
-          case 0: aVal = a.dailyMemberNumber ?? 0; bVal = b.dailyMemberNumber ?? 0;
-          case 1: aVal = a.name.toLowerCase(); bVal = b.name.toLowerCase();
-          case 2: aVal = a.notes.toLowerCase(); bVal = b.notes.toLowerCase();
-          case 3: aVal = a.id ?? 0; bVal = b.id ?? 0;
-          case 4: aVal = a.createdAt ?? DateTime(1970); bVal = b.createdAt ?? DateTime(1970);
-          default: aVal = a.id ?? 0; bVal = b.id ?? 0;
-        }
-        return ascending ? aVal.compareTo(bVal) : bVal.compareTo(aVal);
-      });
+      _sortColumn = _columnDbNames[columnIndex];
+      _currentPage = 0;
     });
+    _loadMembers();
   }
 
   String _formatDate(DateTime? dt) {
@@ -69,7 +91,9 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
     return DateFormat('dd-MM-yyyy HH:mm:ss').format(dt);
   }
 
+  /// Exports daily members to a CSV file. Exports all records or only selected rows.
   Future<void> _exportCsv({bool allRecords = false}) async {
+    final l = AppLocalizations.of(context);
     final List<DailyMember> toExport;
     if (allRecords) {
       toExport = await DatabaseHelper.instance.getAllDailyMembers();
@@ -78,7 +102,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
           _members.where((m) => _selectedIds.contains(m.id)).toList();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No daily members selected for export')),
+        SnackBar(content: Text(l.tr('noDailyMembersSelectedExport'))),
       );
       return;
     }
@@ -87,12 +111,14 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
     if (!mounted) return;
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Exported ${toExport.length} daily members to $path')),
+        SnackBar(content: Text(l.trArgs('exportedDailyMembersCsv', {'count': '${toExport.length}', 'path': path}))),
       );
     }
   }
 
+  /// Exports daily members to a PDF file. Exports all records or only selected rows.
   Future<void> _exportPdf({bool allRecords = false}) async {
+    final l = AppLocalizations.of(context);
     final List<DailyMember> toExport;
     if (allRecords) {
       toExport = await DatabaseHelper.instance.getAllDailyMembers();
@@ -101,7 +127,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
           _members.where((m) => _selectedIds.contains(m.id)).toList();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No daily members selected for export')),
+        SnackBar(content: Text(l.tr('noDailyMembersSelectedExport'))),
       );
       return;
     }
@@ -109,11 +135,13 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
     if (!mounted) return;
     if (path != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF exported to $path')),
+        SnackBar(content: Text(l.trArgs('pdfExported', {'path': path}))),
       );
     }
   }
 
+  /// Opens a file picker for a CSV file, parses it, and upserts daily members.
+  /// Shows a snackbar with created/updated/error counts.
   Future<void> _importCsv() async {
     final dataRows = await ExportHelper.pickAndParseCsv();
     if (dataRows == null) return;
@@ -122,33 +150,36 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
         await DatabaseHelper.instance.importDailyMembersFromCsv(dataRows);
 
     if (!mounted) return;
+    final l = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'CSV import: ${counts['created']} created, ${counts['updated']} updated, ${counts['errors']} errors',
+          l.trArgs('csvImportResult', {'created': '${counts['created']}', 'updated': '${counts['updated']}', 'errors': '${counts['errors']}'}),
         ),
       ),
     );
     _loadMembers();
   }
 
+  /// Deletes a single daily member after a confirmation dialog.
   Future<void> _deleteMember(DailyMember member) async {
+    final l = AppLocalizations.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Daily Member'),
+        title: Text(l.tr('deleteDailyMember')),
         content: Text(
-          'Delete "${member.name}" (Daily #${member.dailyMemberNumber})?',
+          l.trArgs('deleteDailyMemberConfirm', {'name': member.name, 'number': '${member.dailyMemberNumber}'}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(l.tr('cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(l.tr('delete')),
           ),
         ],
       ),
@@ -160,24 +191,26 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
     }
   }
 
+  /// Deletes all currently selected daily members after a confirmation dialog.
   Future<void> _deleteSelected() async {
+    final l = AppLocalizations.of(context);
     if (_selectedIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No daily members selected')),
+        SnackBar(content: Text(l.tr('noDailyMembersSelected'))),
       );
       return;
     }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Selected Daily Members'),
-        content: Text('Delete ${_selectedIds.length} selected daily member(s)? This cannot be undone.'),
+        title: Text(l.tr('deleteSelectedDailyMembers')),
+        content: Text(l.trArgs('deleteSelectedDailyMembersConfirm', {'count': '${_selectedIds.length}'})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.tr('cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(l.tr('delete')),
           ),
         ],
       ),
@@ -186,24 +219,26 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
       final count = await DatabaseHelper.instance.deleteDailyMembers(_selectedIds.toList());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $count daily member(s)')),
+        SnackBar(content: Text(l.trArgs('deletedDailyMembers', {'count': '$count'}))),
       );
       _loadMembers();
     }
   }
 
+  /// Deletes every daily member in the database after a confirmation dialog.
   Future<void> _deleteAll() async {
+    final l = AppLocalizations.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete ALL Daily Members'),
-        content: const Text('This will permanently delete ALL daily members from the database. This cannot be undone.\n\nAre you sure?'),
+        title: Text(l.tr('deleteAllDailyMembers')),
+        content: Text(l.tr('deleteAllDailyMembersConfirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l.tr('cancel'))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete All'),
+            child: Text(l.tr('deleteAll')),
           ),
         ],
       ),
@@ -212,7 +247,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
       final count = await DatabaseHelper.instance.deleteAllDailyMembers();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted $count daily member(s)')),
+        SnackBar(content: Text(l.trArgs('deletedDailyMembers', {'count': '$count'}))),
       );
       _loadMembers();
     }
@@ -220,11 +255,12 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Daily Members'),
+        title: Text(l.tr('dailyMembers')),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -254,36 +290,36 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
               }
             },
             itemBuilder: (ctx) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'export_selected',
-                child: Text('Export selected to CSV'),
+                child: Text(l.tr('exportSelectedCsv')),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'export_all',
-                child: Text('Export ALL to CSV'),
+                child: Text(l.tr('exportAllCsv')),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'pdf_selected',
-                child: Text('Export selected to PDF'),
+                child: Text(l.tr('exportSelectedPdf')),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'pdf_all',
-                child: Text('Export ALL to PDF'),
+                child: Text(l.tr('exportAllPdf')),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'import',
-                child: Text('Import from CSV'),
+                child: Text(l.tr('importFromCsv')),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete_selected',
-                child: Text('Delete selected', style: TextStyle(color: Colors.red)),
+                child: Text(l.tr('deleteSelected'), style: const TextStyle(color: Colors.red)),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete_all',
-                child: Text('Delete ALL', style: TextStyle(color: Colors.red)),
+                child: Text(l.tr('deleteAllCaps'), style: const TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -294,7 +330,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
           await Navigator.pushNamed(context, '/admin/daily-members/add');
           _loadMembers();
         },
-        tooltip: 'Add Daily Member',
+        tooltip: l.tr('addDailyMemberTitle'),
         child: const Icon(Icons.add),
       ),
       body: Column(
@@ -305,13 +341,13 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
             child: Row(
               children: [
                 Text(
-                  '$_totalCount daily member${_totalCount != 1 ? 's' : ''}',
+                  l.trArgs('dailyMembersCount', {'count': '$_totalCount'}),
                   style: theme.textTheme.bodySmall,
                 ),
                 const Spacer(),
                 if (_selectedIds.isNotEmpty)
                   Text(
-                    '${_selectedIds.length} selected',
+                    l.trArgs('selected', {'count': '${_selectedIds.length}'}),
                     style: theme.textTheme.bodySmall,
                   ),
               ],
@@ -324,7 +360,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _members.isEmpty
-                    ? const Center(child: Text('No daily members found'))
+                    ? Center(child: Text(l.tr('noDailyMembersFound')))
                     : SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: SingleChildScrollView(
@@ -343,12 +379,12 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
                             ),
                             dataRowColor: Theme.of(context).dataTableTheme.dataRowColor,
                             columns: [
-                              DataColumn(label: _HoverHeader(text: 'Daily #'), onSort: _sort, numeric: true),
-                              DataColumn(label: _HoverHeader(text: 'Name'), onSort: _sort),
-                              DataColumn(label: _HoverHeader(text: 'Notes'), onSort: _sort),
-                              DataColumn(label: _HoverHeader(text: 'ID'), onSort: _sort, numeric: true),
-                              DataColumn(label: _HoverHeader(text: 'Created (Lisbon)'), onSort: _sort),
-                              const DataColumn(label: Text('Actions')),
+                              DataColumn(label: _HoverHeader(text: l.tr('dailyNumber')), onSort: _sort, numeric: true),
+                              DataColumn(label: _HoverHeader(text: l.tr('name')), onSort: _sort),
+                              DataColumn(label: _HoverHeader(text: l.tr('notes')), onSort: _sort),
+                              DataColumn(label: _HoverHeader(text: l.tr('id')), onSort: _sort, numeric: true),
+                              DataColumn(label: _HoverHeader(text: l.tr('createdLisbon')), onSort: _sort),
+                              DataColumn(label: Text(l.tr('actions'))),
                             ],
                             rows: _members.map((m) {
                               final selected = _selectedIds.contains(m.id);
@@ -410,7 +446,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.edit,
                                               size: 18),
-                                          tooltip: 'Edit',
+                                          tooltip: l.tr('edit'),
                                           onPressed: () async {
                                             await Navigator.pushNamed(
                                               context,
@@ -423,7 +459,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.delete,
                                               size: 18, color: Colors.red),
-                                          tooltip: 'Delete',
+                                          tooltip: l.tr('delete'),
                                           onPressed: () =>
                                               _deleteMember(m),
                                         ),
@@ -445,7 +481,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('Rows per page: '),
+                Text('${l.tr('rowsPerPage')}: '),
                 DropdownButton<int>(
                   value: _pageSize,
                   items: const [
@@ -472,7 +508,7 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
                         }
                       : null,
                 ),
-                Text('Page ${_currentPage + 1} of ${_totalPages < 1 ? 1 : _totalPages}'),
+                Text(l.trArgs('pageOf', {'current': '${_currentPage + 1}', 'total': '${_totalPages < 1 ? 1 : _totalPages}'})),
                 IconButton(
                   icon: const Icon(Icons.chevron_right),
                   onPressed: _currentPage < _totalPages - 1
@@ -491,6 +527,10 @@ class _DailyMemberListScreenState extends State<DailyMemberListScreen> {
   }
 }
 
+/// Form screen for creating or editing a [DailyMember].
+///
+/// When [member] is null the form is in "create" mode; otherwise it pre-fills
+/// fields for editing the existing daily member.
 class DailyMemberEditScreen extends StatefulWidget {
   final DailyMember? member;
 
@@ -500,6 +540,7 @@ class DailyMemberEditScreen extends StatefulWidget {
   State<DailyMemberEditScreen> createState() => _DailyMemberEditScreenState();
 }
 
+/// State for [DailyMemberEditScreen]. Holds form controllers and submission logic.
 class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
@@ -528,9 +569,11 @@ class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
     super.dispose();
   }
 
+  /// Validates the form, then inserts a new daily member or updates the existing one.
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final l = AppLocalizations.of(context);
     setState(() => _isSubmitting = true);
 
     try {
@@ -557,14 +600,14 @@ class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_isNew ? 'Daily member created' : 'Daily member saved'),
+          content: Text(_isNew ? l.tr('dailyMemberCreated') : l.tr('dailyMemberSaved')),
         ),
       );
       Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(l.trArgs('errorPrefix', {'error': '$e'}))),
         );
       }
     } finally {
@@ -581,9 +624,11 @@ class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
       return DailyMemberEditScreen(member: routeMember);
     }
 
+    final l = AppLocalizations.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? 'Add Daily Member' : 'Edit Daily Member'),
+        title: Text(_isNew ? l.tr('addDailyMemberTitle') : l.tr('editDailyMember')),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -597,7 +642,7 @@ class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
                 children: [
                   if (!_isNew) ...[
                     Text(
-                      'Daily #${_member!.dailyMemberNumber} (ID: ${_member!.id})',
+                      l.trArgs('dailyMemberInfo', {'number': '${_member!.dailyMemberNumber}', 'id': '${_member!.id}'}),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 16),
@@ -605,24 +650,24 @@ class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
                   TextFormField(
                     controller: _nameController,
                     autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Name'),
+                    decoration: InputDecoration(labelText: l.tr('name')),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                        v == null || v.trim().isEmpty ? l.tr('nameRequired') : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _dailyNumberController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText:
-                          'Daily member number (auto-assigned if empty)',
+                          l.tr('dailyMemberNumberLabel'),
                     ),
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes',
+                    decoration: InputDecoration(
+                      labelText: l.tr('notesOptional'),
                       alignLabelWithHint: true,
                     ),
                     maxLines: 4,
@@ -640,13 +685,13 @@ class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2),
                                 )
-                              : Text(_isNew ? 'Create' : 'Save'),
+                              : Text(_isNew ? l.tr('create') : l.tr('save')),
                         ),
                       ),
                       const SizedBox(width: 12),
                       OutlinedButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
+                        child: Text(l.tr('cancel')),
                       ),
                     ],
                   ),
@@ -660,6 +705,8 @@ class _DailyMemberEditScreenState extends State<DailyMemberEditScreen> {
   }
 }
 
+/// A DataColumn header label that highlights on mouse hover.
+/// Uses [AppTheme.hoverColor] adapting to light/dark mode.
 class _HoverHeader extends StatefulWidget {
   final String text;
   const _HoverHeader({required this.text});

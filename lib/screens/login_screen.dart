@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../database_helper.dart';
 import '../providers.dart';
+import '../l10n.dart';
 
+/// Admin login screen. Authenticates users via [DatabaseHelper] and sets
+/// session state through [AuthProvider]. Navigates to the admin panel on success.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -10,11 +13,16 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
+/// Mutable state for [LoginScreen].
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  /// Guards against duplicate submissions while an auth request is in-flight.
   bool _isSubmitting = false;
+
+  /// Inline error message shown after a failed login attempt.
   String? _error;
 
   @override
@@ -24,6 +32,8 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Validates the form, authenticates against the DB, and either navigates
+  /// to `/admin` or displays an error message.
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -47,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         Navigator.pushReplacementNamed(context, '/admin');
       } else {
-        setState(() => _error = 'Invalid credentials');
+        setState(() => _error = AppLocalizations.of(context).tr('invalidCredentials'));
       }
     } catch (e) {
       if (mounted) setState(() => _error = 'Error: $e');
@@ -60,10 +70,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin Login'),
+        title: Text(AppLocalizations.of(context).tr('adminLogin')),
         leading: IconButton(
           icon: const Icon(Icons.home),
-          tooltip: 'Home',
+          tooltip: AppLocalizations.of(context).tr('home'),
           onPressed: () => Navigator.pushNamedAndRemoveUntil(
             context,
             '/',
@@ -82,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Admin Login',
+                    AppLocalizations.of(context).tr('adminLogin'),
                     style: Theme.of(context).textTheme.headlineMedium,
                     textAlign: TextAlign.center,
                   ),
@@ -106,23 +116,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _usernameController,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                      prefixIcon: Icon(Icons.person),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).tr('username'),
+                      prefixIcon: const Icon(Icons.person),
                     ),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                        v == null || v.trim().isEmpty ? AppLocalizations.of(context).tr('required') : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).tr('password'),
+                      prefixIcon: const Icon(Icons.lock),
                     ),
                     validator: (v) =>
-                        v == null || v.isEmpty ? 'Required' : null,
+                        v == null || v.isEmpty ? AppLocalizations.of(context).tr('required') : null,
                     onFieldSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: 24),
@@ -134,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Log In'),
+                        : Text(AppLocalizations.of(context).tr('logIn')),
                   ),
                 ],
               ),

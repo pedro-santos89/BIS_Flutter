@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../database_helper.dart';
+import '../l10n.dart';
 import '../models.dart';
 import '../theme.dart';
 
+/// Lists all user-created custom tables with options to view data,
+/// edit structure, or delete each table.
 class CustomTableListScreen extends StatefulWidget {
   const CustomTableListScreen({super.key});
 
@@ -11,6 +14,7 @@ class CustomTableListScreen extends StatefulWidget {
 }
 
 class _CustomTableListScreenState extends State<CustomTableListScreen> {
+  /// All custom table definitions fetched from the database.
   List<CustomTableDef> _tables = [];
   bool _loading = true;
 
@@ -20,6 +24,7 @@ class _CustomTableListScreenState extends State<CustomTableListScreen> {
     _loadTables();
   }
 
+  /// Reloads the list of custom tables from the database.
   Future<void> _loadTables() async {
     setState(() => _loading = true);
     final tables = await DatabaseHelper.instance.getCustomTables();
@@ -29,11 +34,13 @@ class _CustomTableListScreenState extends State<CustomTableListScreen> {
     });
   }
 
+  /// Navigates to the design screen to create a new custom table.
   Future<void> _createTable() async {
     final result = await Navigator.pushNamed(context, '/admin/custom-tables/design');
     if (result == true) _loadTables();
   }
 
+  /// Navigates to the design screen to edit an existing table's structure.
   Future<void> _editTable(CustomTableDef table) async {
     final result = await Navigator.pushNamed(
       context,
@@ -43,27 +50,30 @@ class _CustomTableListScreenState extends State<CustomTableListScreen> {
     if (result == true) _loadTables();
   }
 
+  /// Prompts for confirmation, then deletes the table and its data.
   Future<void> _deleteTable(CustomTableDef table) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Table'),
-        content: Text(
-          'Delete table "${table.tableName}" and ALL its data? '
-          'This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      builder: (ctx) {
+        final l = AppLocalizations.of(ctx);
+        return AlertDialog(
+          title: Text(l.tr('deleteTableTitle')),
+          content: Text(
+            l.trArgs('deleteTableConfirm', {'name': table.tableName}),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l.tr('cancel')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(l.tr('delete')),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirm == true && table.id != null) {
@@ -77,14 +87,15 @@ class _CustomTableListScreenState extends State<CustomTableListScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final hoverColor = AppTheme.hoverColor(isDark);
+    final l = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Custom Tables'),
+        title: Text(l.tr('customTables')),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createTable,
-        tooltip: 'Create Table',
+        tooltip: l.tr('createTable'),
         child: const Icon(Icons.add),
       ),
       body: _loading
@@ -97,10 +108,10 @@ class _CustomTableListScreenState extends State<CustomTableListScreen> {
                       Icon(Icons.table_chart_outlined,
                           size: 64, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
                       const SizedBox(height: 16),
-                      Text('No custom tables yet',
+                      Text(l.tr('noCustomTables'),
                           style: theme.textTheme.titleMedium),
                       const SizedBox(height: 8),
-                      const Text('Tap + to create your first table'),
+                      Text(l.tr('noCustomTablesHint')),
                     ],
                   ),
                 )
@@ -126,6 +137,8 @@ class _CustomTableListScreenState extends State<CustomTableListScreen> {
   }
 }
 
+/// A single list tile representing a custom table, with hover effects
+/// and action buttons for edit and delete.
 class _TableTile extends StatefulWidget {
   final CustomTableDef table;
   final Color hoverColor;
@@ -188,15 +201,17 @@ class _TableTileState extends State<_TableTile> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${widget.table.columns.length} column${widget.table.columns.length != 1 ? 's' : ''}: '
-                        '${widget.table.columns.map((c) => c.columnName).join(', ')}',
+                        AppLocalizations.of(context).trArgs('columnsDetail', {
+                          'count': widget.table.columns.length.toString(),
+                          'names': widget.table.columns.map((c) => c.columnName).join(', '),
+                        }),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ),
                 ),
                 Tooltip(
-                  message: 'Edit structure',
+                  message: AppLocalizations.of(context).tr('editStructure'),
                   child: GestureDetector(
                     onTap: widget.onEdit,
                     child: const Padding(
@@ -206,7 +221,7 @@ class _TableTileState extends State<_TableTile> {
                   ),
                 ),
                 Tooltip(
-                  message: 'Delete table',
+                  message: AppLocalizations.of(context).tr('deleteTable'),
                   child: GestureDetector(
                     onTap: widget.onDelete,
                     child: const Padding(

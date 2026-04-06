@@ -8,7 +8,11 @@ import 'package:pdf/widgets.dart' as pw;
 import 'database_helper.dart';
 import 'models.dart';
 
+/// Provides static methods for exporting (CSV, PDF, JSON) and importing (CSV, JSON) data.
+/// All methods use FilePicker to let the user choose save/open paths.
+/// Optional [dialogTitle] / [labels] parameters allow localized dialog text.
 class ExportHelper {
+  /// Formats a DateTime for display in exports. Uses DD-MM-YYYY HH:MM:SS (Lisbon format).
   static String _formatDate(DateTime? dt) {
     if (dt == null) return '';
     return DateFormat('dd-MM-yyyy HH:mm:ss').format(dt);
@@ -16,7 +20,8 @@ class ExportHelper {
 
   // ─── CSV Export ───
 
-  static Future<String?> exportMembersCsv(List<Member> members) async {
+  /// Exports a list of Members to a CSV file. Returns the saved file path, or null if cancelled.
+  static Future<String?> exportMembersCsv(List<Member> members, {String? dialogTitle}) async {
     final rows = <List<dynamic>>[
       ['ID', 'member number', 'name', 'email', 'communication', 'annual fee', 'notes', 'Created (Lisbon)'],
       ...members.map((m) => [
@@ -30,10 +35,11 @@ class ExportHelper {
         _formatDate(m.createdAt),
       ]),
     ];
-    return _saveCsvFile(rows, 'members_export.csv');
+    return _saveCsvFile(rows, 'members_export.csv', dialogTitle: dialogTitle);
   }
 
-  static Future<String?> exportDailyMembersCsv(List<DailyMember> members) async {
+  /// Exports a list of DailyMembers to a CSV file.
+  static Future<String?> exportDailyMembersCsv(List<DailyMember> members, {String? dialogTitle}) async {
     final rows = <List<dynamic>>[
       ['ID', 'daily member number', 'name', 'notes', 'Created (Lisbon)'],
       ...members.map((m) => [
@@ -44,13 +50,14 @@ class ExportHelper {
         _formatDate(m.createdAt),
       ]),
     ];
-    return _saveCsvFile(rows, 'daily_members_export.csv');
+    return _saveCsvFile(rows, 'daily_members_export.csv', dialogTitle: dialogTitle);
   }
 
-  static Future<String?> _saveCsvFile(List<List<dynamic>> rows, String defaultName) async {
+  /// Internal helper: encodes rows as CSV and saves via FilePicker dialog.
+  static Future<String?> _saveCsvFile(List<List<dynamic>> rows, String defaultName, {String? dialogTitle}) async {
     final csvData = csv_lib.Csv().encode(rows);
     final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save CSV file',
+      dialogTitle: dialogTitle ?? 'Save CSV file',
       fileName: defaultName,
       type: FileType.custom,
       allowedExtensions: ['csv'],
@@ -65,9 +72,11 @@ class ExportHelper {
 
   // ─── CSV Import ───
 
-  static Future<List<Map<String, dynamic>>?> pickAndParseCsv() async {
+  /// Opens a CSV file via FilePicker and parses it into a list of row maps.
+  /// The first row is treated as headers. Returns null if cancelled or empty.
+  static Future<List<Map<String, dynamic>>?> pickAndParseCsv({String? dialogTitle}) async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Select CSV file',
+      dialogTitle: dialogTitle ?? 'Select CSV file',
       type: FileType.custom,
       allowedExtensions: ['csv'],
     );
@@ -94,7 +103,9 @@ class ExportHelper {
 
   // ─── Whole Database Export/Import (JSON) ───
 
-  static Future<String?> exportWholeDatabase() async {
+  /// Exports the entire database (members + daily members) as a JSON backup file.
+  /// The JSON includes a version field for future compatibility.
+  static Future<String?> exportWholeDatabase({String? dialogTitle}) async {
     final members = await DatabaseHelper.instance.getAllMembers();
     final dailyMembers = await DatabaseHelper.instance.getAllDailyMembers();
 
@@ -108,7 +119,7 @@ class ExportHelper {
     final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
 
     final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Export Database',
+      dialogTitle: dialogTitle ?? 'Export Database',
       fileName: 'bis_database_backup.json',
       type: FileType.custom,
       allowedExtensions: ['json'],
@@ -121,9 +132,12 @@ class ExportHelper {
     return path;
   }
 
-  static Future<Map<String, int>?> importWholeDatabase() async {
+  /// Imports a JSON database backup, adding records to existing data.
+  /// Does NOT delete existing records — it merges.
+  /// Returns counts: {members, daily_members, errors}, or null if cancelled.
+  static Future<Map<String, int>?> importWholeDatabase({String? dialogTitle}) async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Import Database Backup',
+      dialogTitle: dialogTitle ?? 'Import Database Backup',
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
@@ -175,9 +189,10 @@ class ExportHelper {
 
   // ─── PDF Export ───
 
-  static Future<String?> _savePdfFile(pw.Document pdf, String defaultName) async {
+  /// Internal helper: saves a pw.Document as PDF via FilePicker dialog.
+  static Future<String?> _savePdfFile(pw.Document pdf, String defaultName, {String? dialogTitle}) async {
     final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save PDF file',
+      dialogTitle: dialogTitle ?? 'Save PDF file',
       fileName: defaultName,
       type: FileType.custom,
       allowedExtensions: ['pdf'],
@@ -190,10 +205,23 @@ class ExportHelper {
     return path;
   }
 
-  static Future<String?> exportMembersPdf(List<Member> members, {String title = 'Members'}) async {
+  /// Exports members to a paginated landscape PDF table (28 rows/page).
+  /// [labels] map allows localized text for headers, pagination, etc.
+  /// Label keys: noRecords, exported, total, records, page, of, yes, no,
+  ///             headers (comma-separated), saveDialog.
+  static Future<String?> exportMembersPdf(List<Member> members, {String title = 'Members', Map<String, String>? labels}) async {
     final pdf = pw.Document();
     final dateStr = DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now());
     final totalPages = members.isEmpty ? 1 : (members.length / 28).ceil();
+    final noRecords = labels?['noRecords'] ?? 'No records to export';
+    final exported = labels?['exported'] ?? 'Exported:';
+    final totalLabel = labels?['total'] ?? 'Total:';
+    final recordsLabel = labels?['records'] ?? 'records';
+    final pageLabel = labels?['page'] ?? 'Page';
+    final ofLabel = labels?['of'] ?? 'of';
+    final yesLabel = labels?['yes'] ?? 'Yes';
+    final noLabel = labels?['no'] ?? 'No';
+    final headers = labels?['headers']?.split(',') ?? ['#', 'Name', 'Email', 'Comm.', 'Fee', 'ID', 'Created'];
 
     // Column width ratios for: #, Name, Email, Comm., Fee, ID, Created
     final columnWidths = <int, pw.TableColumnWidth>{
@@ -210,7 +238,7 @@ class ExportHelper {
       pdf.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(24),
-        build: (context) => pw.Center(child: pw.Text('No records to export')),
+        build: (context) => pw.Center(child: pw.Text(noRecords)),
       ));
     }
 
@@ -230,11 +258,11 @@ class ExportHelper {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(title, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('Exported: $dateStr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                    pw.Text('$exported $dateStr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                   ],
                 ),
                 pw.SizedBox(height: 4),
-                pw.Text('Total: ${members.length} records', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+                pw.Text('$totalLabel ${members.length} $recordsLabel', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
                 pw.SizedBox(height: 8),
                 pw.Table(
                   columnWidths: columnWidths,
@@ -243,7 +271,7 @@ class ExportHelper {
                     // Header row
                     pw.TableRow(
                       decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                      children: ['#', 'Name', 'Email', 'Comm.', 'Fee', 'ID', 'Created'].map((h) =>
+                      children: headers.map((h) =>
                         pw.Padding(
                           padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
                           child: pw.Text(h, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
@@ -256,8 +284,8 @@ class ExportHelper {
                         '${m.memberNumber ?? ""}',
                         m.name,
                         m.email ?? '',
-                        m.communication ? 'Yes' : 'No',
-                        m.annualFee ? 'Yes' : 'No',
+                        m.communication ? yesLabel : noLabel,
+                        m.annualFee ? yesLabel : noLabel,
                         '${m.id}',
                         _formatDate(m.createdAt),
                       ].map((cell) =>
@@ -272,7 +300,7 @@ class ExportHelper {
                 pw.Spacer(),
                 pw.Align(
                   alignment: pw.Alignment.centerRight,
-                  child: pw.Text('Page $pageNum of $totalPages', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                  child: pw.Text('$pageLabel $pageNum $ofLabel $totalPages', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
                 ),
               ],
             );
@@ -281,13 +309,22 @@ class ExportHelper {
       );
     }
 
-    return _savePdfFile(pdf, 'members_export.pdf');
+    return _savePdfFile(pdf, 'members_export.pdf', dialogTitle: labels?['saveDialog']);
   }
 
-  static Future<String?> exportDailyMembersPdf(List<DailyMember> members, {String title = 'Daily Members'}) async {
+  /// Exports daily members to a paginated landscape PDF table (32 rows/page).
+  /// [labels] uses the same keys as exportMembersPdf.
+  static Future<String?> exportDailyMembersPdf(List<DailyMember> members, {String title = 'Daily Members', Map<String, String>? labels}) async {
     final pdf = pw.Document();
     final dateStr = DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now());
     final totalPages = members.isEmpty ? 1 : (members.length / 32).ceil();
+    final noRecords = labels?['noRecords'] ?? 'No records to export';
+    final exported = labels?['exported'] ?? 'Exported:';
+    final totalLabel = labels?['total'] ?? 'Total:';
+    final recordsLabel = labels?['records'] ?? 'records';
+    final pageLabel = labels?['page'] ?? 'Page';
+    final ofLabel = labels?['of'] ?? 'of';
+    final pdfHeaders = labels?['headers']?.split(',') ?? ['Daily #', 'Name', 'Notes', 'ID', 'Created'];
 
     // Column width ratios for: Daily#, Name, Notes, ID, Created
     final columnWidths = <int, pw.TableColumnWidth>{
@@ -302,7 +339,7 @@ class ExportHelper {
       pdf.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(24),
-        build: (context) => pw.Center(child: pw.Text('No records to export')),
+        build: (context) => pw.Center(child: pw.Text(noRecords)),
       ));
     }
 
@@ -322,11 +359,11 @@ class ExportHelper {
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(title, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('Exported: $dateStr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                    pw.Text('$exported $dateStr', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                   ],
                 ),
                 pw.SizedBox(height: 4),
-                pw.Text('Total: ${members.length} records', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+                pw.Text('$totalLabel ${members.length} $recordsLabel', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
                 pw.SizedBox(height: 8),
                 pw.Table(
                   columnWidths: columnWidths,
@@ -335,7 +372,7 @@ class ExportHelper {
                     // Header row
                     pw.TableRow(
                       decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                      children: ['Daily #', 'Name', 'Notes', 'ID', 'Created'].map((h) =>
+                      children: pdfHeaders.map((h) =>
                         pw.Padding(
                           padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
                           child: pw.Text(h, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
@@ -362,7 +399,7 @@ class ExportHelper {
                 pw.Spacer(),
                 pw.Align(
                   alignment: pw.Alignment.centerRight,
-                  child: pw.Text('Page $pageNum of $totalPages', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+                  child: pw.Text('$pageLabel $pageNum $ofLabel $totalPages', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
                 ),
               ],
             );
@@ -371,6 +408,6 @@ class ExportHelper {
       );
     }
 
-    return _savePdfFile(pdf, 'daily_members_export.pdf');
+    return _savePdfFile(pdf, 'daily_members_export.pdf', dialogTitle: labels?['saveDialog']);
   }
 }

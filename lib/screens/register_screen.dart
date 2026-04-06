@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../database_helper.dart';
 import '../models.dart';
+import '../l10n.dart';
 
+/// Registration form for regular (annual) members.
+/// Collects name, optional email, communication consent, and annual-fee status,
+/// then inserts a [Member] via [DatabaseHelper] and navigates to the success screen.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -9,12 +13,19 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
+/// Mutable state for [RegisterScreen].
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+
+  /// Whether the member consents to receiving communications.
   bool _communication = false;
+
+  /// Whether the member has paid the annual fee.
   bool _annualFee = false;
+
+  /// Guards against duplicate submissions.
   bool _isSubmitting = false;
 
   @override
@@ -43,6 +54,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (!mounted) return;
 
+      // Navigate to success screen, passing the assigned member number.
       Navigator.pushReplacementNamed(
         context,
         '/registration-success',
@@ -65,7 +77,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Member Registration'),
+        title: Text(AppLocalizations.of(context).tr('memberRegistration')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pushReplacementNamed(
@@ -73,7 +85,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               '/register-daily',
             ),
             child: Text(
-              'Daily member registration',
+              AppLocalizations.of(context).tr('dailyMemberRegistrationLink'),
               style: TextStyle(color: Theme.of(context).colorScheme.primary),
             ),
           ),
@@ -90,7 +102,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Member Registration',
+                    AppLocalizations.of(context).tr('memberRegistration'),
                     style: Theme.of(context).textTheme.headlineMedium,
                     textAlign: TextAlign.center,
                   ),
@@ -98,33 +110,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _nameController,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Name',
-                      prefixIcon: Icon(Icons.person),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).tr('name'),
+                      prefixIcon: const Icon(Icons.person),
                     ),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Name is required' : null,
+                        v == null || v.trim().isEmpty ? AppLocalizations.of(context).tr('nameRequired') : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email (Optional)',
-                      prefixIcon: Icon(Icons.email),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).tr('emailOptional'),
+                      prefixIcon: const Icon(Icons.email),
                     ),
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
                   CheckboxListTile(
-                    title: const Text(
-                      'I want to receive communications from BUS with upcoming events and news',
+                    title: Text(
+                      AppLocalizations.of(context).tr('communicationCheckbox'),
                     ),
                     value: _communication,
                     onChanged: (v) => setState(() => _communication = v ?? false),
                     controlAffinity: ListTileControlAffinity.leading,
                   ),
                   CheckboxListTile(
-                    title: const Text('Annual fee paid'),
+                    title: Text(AppLocalizations.of(context).tr('annualFeePaid')),
                     value: _annualFee,
                     onChanged: (v) => setState(() => _annualFee = v ?? false),
                     controlAffinity: ListTileControlAffinity.leading,
@@ -138,7 +150,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Register'),
+                        : Text(AppLocalizations.of(context).tr('register')),
                   ),
                 ],
               ),
@@ -150,6 +162,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
+/// Registration form for daily (one-time) members.
+/// Collects name and optional notes, inserts a [DailyMember] via
+/// [DatabaseHelper], and navigates to the daily success screen.
 class RegisterDailyScreen extends StatefulWidget {
   const RegisterDailyScreen({super.key});
 
@@ -157,10 +172,13 @@ class RegisterDailyScreen extends StatefulWidget {
   State<RegisterDailyScreen> createState() => _RegisterDailyScreenState();
 }
 
+/// Mutable state for [RegisterDailyScreen].
 class _RegisterDailyScreenState extends State<RegisterDailyScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _notesController = TextEditingController();
+
+  /// Guards against duplicate submissions.
   bool _isSubmitting = false;
 
   @override
@@ -207,7 +225,7 @@ class _RegisterDailyScreenState extends State<RegisterDailyScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Daily Member Registration'),
+        title: Text(AppLocalizations.of(context).tr('dailyMemberRegistration')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pushReplacementNamed(
@@ -215,7 +233,7 @@ class _RegisterDailyScreenState extends State<RegisterDailyScreen> {
               '/register',
             ),
             child: Text(
-              'Member registration',
+              AppLocalizations.of(context).tr('memberRegistrationLink'),
               style: TextStyle(color: Theme.of(context).colorScheme.primary),
             ),
           ),
@@ -232,7 +250,7 @@ class _RegisterDailyScreenState extends State<RegisterDailyScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Daily Member Registration',
+                    AppLocalizations.of(context).tr('dailyMemberRegistration'),
                     style: Theme.of(context).textTheme.headlineMedium,
                     textAlign: TextAlign.center,
                   ),
@@ -240,19 +258,19 @@ class _RegisterDailyScreenState extends State<RegisterDailyScreen> {
                   TextFormField(
                     controller: _nameController,
                     autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Name',
-                      prefixIcon: Icon(Icons.person),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).tr('name'),
+                      prefixIcon: const Icon(Icons.person),
                     ),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Name is required' : null,
+                        v == null || v.trim().isEmpty ? AppLocalizations.of(context).tr('nameRequired') : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes (Optional)',
-                      prefixIcon: Icon(Icons.note),
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).tr('notesOptional'),
+                      prefixIcon: const Icon(Icons.note),
                       alignLabelWithHint: true,
                     ),
                     maxLines: 4,
@@ -266,7 +284,7 @@ class _RegisterDailyScreenState extends State<RegisterDailyScreen> {
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Register'),
+                        : Text(AppLocalizations.of(context).tr('register')),
                   ),
                 ],
               ),
@@ -278,6 +296,8 @@ class _RegisterDailyScreenState extends State<RegisterDailyScreen> {
   }
 }
 
+/// Success screen shown after a regular member registration.
+/// Expects route arguments `name` (String) and `memberNumber` (int?).
 class RegistrationSuccessScreen extends StatelessWidget {
   const RegistrationSuccessScreen({super.key});
 
@@ -289,7 +309,7 @@ class RegistrationSuccessScreen extends StatelessWidget {
     final memberNumber = args?['memberNumber'];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Registration Complete')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).tr('registrationComplete'))),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -303,14 +323,14 @@ class RegistrationSuccessScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'Congratulations, $name!',
+                AppLocalizations.of(context).trArgs('congratsName', {'name': name}),
                 style: Theme.of(context).textTheme.headlineMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               if (memberNumber != null)
                 Text(
-                  'Your member number is: $memberNumber',
+                  AppLocalizations.of(context).trArgs('yourMemberNumber', {'number': '$memberNumber'}),
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
@@ -321,7 +341,7 @@ class RegistrationSuccessScreen extends StatelessWidget {
                   '/',
                   (route) => false,
                 ),
-                child: const Text('Back to Home'),
+                child: Text(AppLocalizations.of(context).tr('backToHome')),
               ),
             ],
           ),
@@ -331,6 +351,8 @@ class RegistrationSuccessScreen extends StatelessWidget {
   }
 }
 
+/// Success screen shown after a daily member registration.
+/// Expects route arguments `name` (String) and `dailyMemberNumber` (int?).
 class DailyRegistrationSuccessScreen extends StatelessWidget {
   const DailyRegistrationSuccessScreen({super.key});
 
@@ -342,7 +364,7 @@ class DailyRegistrationSuccessScreen extends StatelessWidget {
     final dailyNumber = args?['dailyMemberNumber'];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Registration Complete')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).tr('registrationComplete'))),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -356,14 +378,14 @@ class DailyRegistrationSuccessScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'Welcome, $name!',
+                AppLocalizations.of(context).trArgs('welcomeName', {'name': name}),
                 style: Theme.of(context).textTheme.headlineMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               if (dailyNumber != null)
                 Text(
-                  'Your daily member number is: $dailyNumber',
+                  AppLocalizations.of(context).trArgs('yourDailyMemberNumber', {'number': '$dailyNumber'}),
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
@@ -374,7 +396,7 @@ class DailyRegistrationSuccessScreen extends StatelessWidget {
                   '/',
                   (route) => false,
                 ),
-                child: const Text('Back to Home'),
+                child: Text(AppLocalizations.of(context).tr('backToHome')),
               ),
             ],
           ),

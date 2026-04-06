@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import '../database_helper.dart';
+import '../l10n.dart';
 import '../models.dart';
 import '../theme.dart';
 
+/// Admin-only screen for managing application users.
+///
+/// Provides a list of all [AppUser]s with actions to create new users,
+/// change passwords, toggle admin/normal roles, and delete users.
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
 
@@ -10,8 +15,15 @@ class UserManagementScreen extends StatefulWidget {
   State<UserManagementScreen> createState() => _UserManagementScreenState();
 }
 
+/// State for [UserManagementScreen].
+///
+/// Loads all users on init and refreshes after every mutation
+/// (create, password change, role toggle, delete).
 class _UserManagementScreenState extends State<UserManagementScreen> {
+  /// Cached list of all app users, refreshed by [_loadUsers].
   List<AppUser> _users = [];
+
+  /// Whether the user list is currently being fetched from the database.
   bool _loading = true;
 
   @override
@@ -20,6 +32,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     _loadUsers();
   }
 
+  /// Fetches all users from the database and updates the UI.
   Future<void> _loadUsers() async {
     setState(() => _loading = true);
     final users = await DatabaseHelper.instance.getUsers();
@@ -29,47 +42,53 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     });
   }
 
+  /// Opens the create-user dialog and reloads the list on success.
   Future<void> _createUser() async {
     final result = await _showUserDialog(null);
     if (result == true) _loadUsers();
   }
 
+  /// Shows a dialog to set a new password for [user].
   Future<void> _changePassword(AppUser user) async {
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Change Password: ${user.username}'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'New Password',
-              prefixIcon: Icon(Icons.lock),
+      builder: (ctx) {
+        final dl = AppLocalizations.of(ctx);
+        return AlertDialog(
+          title: Text(dl.trArgs('changePasswordTitle', {'username': user.username})),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: controller,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: dl.tr('newPassword'),
+                prefixIcon: Icon(Icons.lock),
+              ),
+              validator: (v) =>
+                  v == null || v.isEmpty ? dl.tr('required') : null,
             ),
-            validator: (v) =>
-                v == null || v.isEmpty ? 'Required' : null,
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(ctx, true);
-              }
-            },
-            child: const Text('Change Password'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(dl.tr('cancel')),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(ctx, true);
+                }
+              },
+              child: Text(dl.tr('changePasswordButton')),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed == true && user.id != null) {
@@ -78,33 +97,37 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Password changed for ${user.username}')),
+            content: Text(l.trArgs('passwordChanged', {'username': user.username}))),
       );
     }
     controller.dispose();
   }
 
+  /// Toggles [user] between admin and normal role after confirmation.
   Future<void> _toggleRole(AppUser user) async {
     if (user.id == null) return;
     final newIsAdmin = !user.isAdmin;
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Change Role'),
-        content: Text(
-          'Change "${user.username}" to ${newIsAdmin ? 'Admin' : 'Normal User'}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      builder: (ctx) {
+        final dl = AppLocalizations.of(ctx);
+        return AlertDialog(
+          title: Text(dl.tr('changeRole')),
+          content: Text(
+            dl.trArgs('changeRoleConfirm', {'username': user.username, 'role': newIsAdmin ? dl.tr('admin') : dl.tr('normalUser')}),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(dl.tr('cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(dl.tr('save')),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirm == true) {
@@ -113,37 +136,45 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     }
   }
 
+  /// Deletes [user] from the database after confirmation and reloads the list.
   Future<void> _deleteUser(AppUser user) async {
     if (user.id == null) return;
+    final l = AppLocalizations.of(context);
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete User'),
-        content: Text('Delete user "${user.username}"? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final dl = AppLocalizations.of(ctx);
+        return AlertDialog(
+          title: Text(dl.tr('deleteUserTitle')),
+          content: Text(dl.trArgs('deleteUserConfirm', {'username': user.username})),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(dl.tr('cancel')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(dl.tr('delete')),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirm == true) {
       await DatabaseHelper.instance.deleteUser(user.id!);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted user "${user.username}"')),
+        SnackBar(content: Text(l.trArgs('deletedUser', {'username': user.username}))),
       );
       _loadUsers();
     }
   }
 
+  /// Shows a dialog for creating a new user or editing an existing one.
+  ///
+  /// Returns `true` if the user was successfully created/updated.
   Future<bool?> _showUserDialog(AppUser? existing) async {
     final usernameController =
         TextEditingController(text: existing?.username ?? '');
@@ -155,8 +186,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(isNew ? 'Create User' : 'Edit User'),
+        builder: (ctx, setDialogState) {
+          final dl = AppLocalizations.of(ctx);
+          return AlertDialog(
+          title: Text(isNew ? dl.tr('createUser') : dl.tr('editUser')),
           content: SizedBox(
             width: 350,
             child: Form(
@@ -166,33 +199,33 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 children: [
                   TextFormField(
                     controller: usernameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
+                    decoration: InputDecoration(
+                      labelText: dl.tr('username'),
                       prefixIcon: Icon(Icons.person),
                     ),
                     enabled: isNew,
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                        v == null || v.trim().isEmpty ? dl.tr('required') : null,
                   ),
                   const SizedBox(height: 12),
                   if (isNew) ...[
                     TextFormField(
                       controller: passwordController,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
+                      decoration: InputDecoration(
+                        labelText: dl.tr('password'),
                         prefixIcon: Icon(Icons.lock),
                       ),
                       validator: (v) =>
-                          v == null || v.isEmpty ? 'Required' : null,
+                          v == null || v.isEmpty ? dl.tr('required') : null,
                     ),
                     const SizedBox(height: 12),
                   ],
                   SwitchListTile(
-                    title: const Text('Admin'),
+                    title: Text(dl.tr('adminSwitch')),
                     subtitle: Text(isAdmin
-                        ? 'Can manage users and all features'
-                        : 'Standard user access'),
+                        ? dl.tr('adminSwitchSubtitleOn')
+                        : dl.tr('adminSwitchSubtitleOff')),
                     value: isAdmin,
                     onChanged: (v) =>
                         setDialogState(() => isAdmin = v),
@@ -204,7 +237,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
+              child: Text(dl.tr('cancel')),
             ),
             FilledButton(
               onPressed: () async {
@@ -224,15 +257,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 } catch (e) {
                   if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text('Error: $e')),
+                      SnackBar(content: Text(dl.trArgs('errorPrefix', {'error': e.toString()}))),
                     );
                   }
                 }
               },
-              child: Text(isNew ? 'Create' : 'Save'),
+              child: Text(isNew ? dl.tr('create') : dl.tr('save')),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
 
@@ -243,23 +277,24 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final hoverColor = AppTheme.hoverColor(isDark);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('User Management'),
+        title: Text(l.tr('userManagement')),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createUser,
-        tooltip: 'Create User',
+        tooltip: l.tr('createUser'),
         child: const Icon(Icons.person_add),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _users.isEmpty
-              ? const Center(child: Text('No users found'))
+              ? Center(child: Text(l.tr('noUsersFound')))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _users.length,
@@ -278,6 +313,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 }
 
+/// A single row in the user list showing name, role badge, and action icons.
+///
+/// Tracks mouse hover state to highlight the tile on desktop.
 class _UserTile extends StatefulWidget {
   final AppUser user;
   final Color hoverColor;
@@ -302,6 +340,7 @@ class _UserTileState extends State<_UserTile> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
@@ -342,7 +381,7 @@ class _UserTileState extends State<_UserTile> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.user.isAdmin ? 'Administrator' : 'Normal User',
+                      widget.user.isAdmin ? l.tr('administrator') : l.tr('normalUser'),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -350,8 +389,8 @@ class _UserTileState extends State<_UserTile> {
               ),
               Tooltip(
                 message: widget.user.isAdmin
-                    ? 'Demote to normal user'
-                    : 'Promote to admin',
+                    ? l.tr('demoteToNormal')
+                    : l.tr('promoteToAdmin'),
                 child: GestureDetector(
                   onTap: widget.onToggleRole,
                   child: Padding(
@@ -366,7 +405,7 @@ class _UserTileState extends State<_UserTile> {
                 ),
               ),
               Tooltip(
-                message: 'Change password',
+                message: l.tr('changePassword'),
                 child: GestureDetector(
                   onTap: widget.onChangePassword,
                   child: const Padding(
@@ -376,7 +415,7 @@ class _UserTileState extends State<_UserTile> {
                 ),
               ),
               Tooltip(
-                message: 'Delete user',
+                message: l.tr('deleteUser'),
                 child: GestureDetector(
                   onTap: widget.onDelete,
                   child: const Padding(
