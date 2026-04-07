@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'cloud_storage_provider.dart';
 
@@ -7,10 +6,9 @@ import 'cloud_storage_provider.dart';
 /// Uses Supabase anonymous/email auth and stores files in a
 /// dedicated storage bucket.
 class SupabaseProvider extends CloudStorageProvider {
-  static const _urlKey = 'supabase_url';
-  static const _anonKeyKey = 'supabase_anon_key';
-  static const _emailKey = 'supabase_email';
-  static const _passwordKey = 'supabase_password';
+  // EMBEDDED SUPABASE CREDENTIALS (replace with your project's values)
+  static const String _supabaseUrl = 'YOUR_SUPABASE_URL';
+  static const String _supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
   static const _bucketName = 'bis-backups';
   static const _folderPath = 'backups';
 
@@ -28,55 +26,13 @@ class SupabaseProvider extends CloudStorageProvider {
     return Supabase.instance.client.auth.currentSession != null;
   }
 
-  /// Stores Supabase project credentials.
-  static Future<void> saveCredentials({
-    required String url,
-    required String anonKey,
-    String? email,
-    String? password,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_urlKey, url);
-    await prefs.setString(_anonKeyKey, anonKey);
-    if (email != null) await prefs.setString(_emailKey, email);
-    if (password != null) await prefs.setString(_passwordKey, password);
-  }
-
-  /// Returns saved Supabase config, or null if not configured.
-  static Future<Map<String, String>?> getCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final url = prefs.getString(_urlKey);
-    final anonKey = prefs.getString(_anonKeyKey);
-    if (url == null || url.isEmpty || anonKey == null || anonKey.isEmpty) {
-      return null;
-    }
-    return {
-      'url': url,
-      'anonKey': anonKey,
-      'email': prefs.getString(_emailKey) ?? '',
-      'password': prefs.getString(_passwordKey) ?? '',
-    };
-  }
-
-  /// Clears stored credentials.
-  static Future<void> clearCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_urlKey);
-    await prefs.remove(_anonKeyKey);
-    await prefs.remove(_emailKey);
-    await prefs.remove(_passwordKey);
-  }
-
   @override
   Future<bool> authenticate() async {
     try {
-      final creds = await getCredentials();
-      if (creds == null) return false;
-
       if (!_initialized) {
         await Supabase.initialize(
-          url: creds['url']!,
-          anonKey: creds['anonKey']!,
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
         );
         _initialized = true;
       }
@@ -85,21 +41,11 @@ class SupabaseProvider extends CloudStorageProvider {
 
       // If already has a valid session, we're good
       if (client.auth.currentSession != null) {
-        await _ensureBucket();
         return true;
       }
 
-      // Try email/password auth if provided
-      final email = creds['email'] ?? '';
-      final password = creds['password'] ?? '';
-      if (email.isNotEmpty && password.isNotEmpty) {
-        await client.auth.signInWithPassword(email: email, password: password);
-      } else {
-        // Use anonymous sign in
-        await client.auth.signInAnonymously();
-      }
-
-      await _ensureBucket();
+      // Use anonymous sign in
+      await client.auth.signInAnonymously();
       return true;
     } catch (e) {
       return false;
@@ -113,12 +59,6 @@ class SupabaseProvider extends CloudStorageProvider {
         await Supabase.instance.client.auth.signOut();
       } catch (_) {}
     }
-  }
-
-  Future<void> _ensureBucket() async {
-    // Bucket creation is typically done server-side via Supabase dashboard.
-    // We just verify we can access the bucket; if it doesn't exist,
-    // the admin should create it in the Supabase dashboard.
   }
 
   SupabaseStorageClient get _storage => Supabase.instance.client.storage;

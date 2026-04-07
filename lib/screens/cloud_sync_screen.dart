@@ -270,6 +270,33 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     });
   }
 
+  Future<void> _exportMembersCsv() async {
+    if (_syncEngine == null) return;
+    await _runWithLoading(() async {
+      final name = await _syncEngine!.exportMembersCsvToCloud();
+      _setStatus('CSV exported: $name');
+      await _refreshFileList();
+    });
+  }
+
+  Future<void> _exportDailyMembersCsv() async {
+    if (_syncEngine == null) return;
+    await _runWithLoading(() async {
+      final name = await _syncEngine!.exportDailyMembersCsvToCloud();
+      _setStatus('CSV exported: $name');
+      await _refreshFileList();
+    });
+  }
+
+  Future<void> _exportAllCsv() async {
+    if (_syncEngine == null) return;
+    await _runWithLoading(() async {
+      await _syncEngine!.exportAllCsvToCloud();
+      _setStatus(AppLocalizations.of(context).tr('csvExportComplete'));
+      await _refreshFileList();
+    });
+  }
+
   Future<void> _browseCloudStorage() async {
     if (_currentProvider == null) return;
 
@@ -353,25 +380,21 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                   icon: Icons.cloud,
                   title: 'Google Drive',
                   type: CloudProviderType.googleDrive,
-                  onConfigure: _configureGoogleDrive,
                 ),
                 _buildProviderCard(
                   icon: Icons.cloud_queue,
                   title: 'Dropbox',
                   type: CloudProviderType.dropbox,
-                  onConfigure: _configureDropbox,
                 ),
                 _buildProviderCard(
                   icon: Icons.cloud_circle,
                   title: 'OneDrive',
                   type: CloudProviderType.oneDrive,
-                  onConfigure: _configureOneDrive,
                 ),
                 _buildProviderCard(
                   icon: Icons.storage,
                   title: 'Supabase',
                   type: CloudProviderType.supabase,
-                  onConfigure: _configureSupabase,
                 ),
 
                 // ─── Sync Actions ───
@@ -408,6 +431,21 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                         icon: const Icon(Icons.cloud_circle),
                         label: Text(l.tr('browseCloudStorage')),
                         onPressed: _loading ? null : _browseCloudStorage,
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.table_chart),
+                        label: Text(l.tr('exportMembersCsvCloud')),
+                        onPressed: _loading ? null : _exportMembersCsv,
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_month),
+                        label: Text(l.tr('exportDailyMembersCsvCloud')),
+                        onPressed: _loading ? null : _exportDailyMembersCsv,
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.file_download),
+                        label: Text(l.tr('exportAllCsvCloud')),
+                        onPressed: _loading ? null : _exportAllCsv,
                       ),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.logout),
@@ -460,7 +498,6 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     required IconData icon,
     required String title,
     required CloudProviderType type,
-    required VoidCallback onConfigure,
   }) {
     final isActive = _activeProvider == type;
     final isConnected = _providers[type]?.isAuthenticated ?? false;

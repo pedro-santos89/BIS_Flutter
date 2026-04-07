@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:csv/csv.dart' as csv_lib;
+import 'package:intl/intl.dart';
 import '../database_helper.dart';
 import '../models.dart';
 import 'cloud_storage_provider.dart';
@@ -306,4 +308,74 @@ class SyncEngine {
     final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
     return await _mergeData(parsed);
   }
+
+  // ─── CSV Export/Upload ───
+
+  static String _formatDate(DateTime? dt) {
+    if (dt == null) return '';
+    return DateFormat('dd-MM-yyyy HH:mm:ss').format(dt);
+  }
+
+  /// Exports members as CSV and uploads to the connected cloud provider.
+  Future<String> exportMembersCsvToCloud() async {
+    if (!provider.isAuthenticated) {
+      throw StateError('Provider not authenticated');
+    }
+    final db = DatabaseHelper.instance;
+    final members = await db.getAllMembers();
+
+    final rows = <List<dynamic>>[
+      ['ID', 'Member Number', 'Name', 'Email', 'Communication', 'Annual Fee', 'Notes', 'Created'],
+      ...members.map((m) => [
+        m.id,
+        m.memberNumber,
+        m.name,
+        m.email ?? '',
+        m.communication ? 'True' : 'False',
+        m.annualFee ? 'True' : 'False',
+        m.notes,
+        _formatDate(m.createdAt),
+      ]),
+    ];
+
+    final csvData = csv_lib.CsvEncoder().convert(rows);
+    final bytes = Uint8List.fromList(utf8.encode(csvData));
+    final now = DateTime.now();
+    final fileName = 'members_${now.year}${_pad(now.month)}${_pad(now.day)}_${_pad(now.hour)}${_pad(now.minute)}.csv';
+    return await provider.uploadFile(fileName, bytes, mimeType: 'text/csv');
+  }
+
+  /// Exports daily members as CSV and uploads to the connected cloud provider.
+  Future<String> exportDailyMembersCsvToCloud() async {
+    if (!provider.isAuthenticated) {
+      throw StateError('Provider not authenticated');
+    }
+    final db = DatabaseHelper.instance;
+    final dailyMembers = await db.getAllDailyMembers();
+
+    final rows = <List<dynamic>>[
+      ['ID', 'Daily Member Number', 'Name', 'Notes', 'Created'],
+      ...dailyMembers.map((m) => [
+        m.id,
+        m.dailyMemberNumber,
+        m.name,
+        m.notes,
+        _formatDate(m.createdAt),
+      ]),
+    ];
+
+    final csvData = csv_lib.CsvEncoder().convert(rows);
+    final bytes = Uint8List.fromList(utf8.encode(csvData));
+    final now = DateTime.now();
+    final fileName = 'daily_members_${now.year}${_pad(now.month)}${_pad(now.day)}_${_pad(now.hour)}${_pad(now.minute)}.csv';
+    return await provider.uploadFile(fileName, bytes, mimeType: 'text/csv');
+  }
+
+  /// Exports all data (members + daily members) as CSV and uploads both files.
+  Future<void> exportAllCsvToCloud() async {
+    await exportMembersCsvToCloud();
+    await exportDailyMembersCsvToCloud();
+  }
+
+  static String _pad(int n) => n.toString().padLeft(2, '0');
 }

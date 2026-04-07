@@ -7,10 +7,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'cloud_storage_provider.dart';
 
 /// OneDrive (Microsoft Graph) implementation of [CloudStorageProvider].
-/// Uses OAuth2 authorization code flow with PKCE for desktop.
+/// Uses OAuth2 authorization code flow for desktop.
 /// Stores files in a dedicated "BIS_Backups" folder in the user's OneDrive.
 class OneDriveProvider extends CloudStorageProvider {
-  static const _clientIdKey = 'onedrive_client_id';
+  // EMBEDDED OAUTH CREDENTIALS (replace with your registered Azure app client ID)
+  static const String _clientId = 'YOUR_ONEDRIVE_CLIENT_ID';
   static const _tokenKey = 'onedrive_access_token';
   static const _refreshTokenKey = 'onedrive_refresh_token';
   static const _folderName = 'BIS_Backups';
@@ -28,26 +29,6 @@ class OneDriveProvider extends CloudStorageProvider {
 
   @override
   bool get isAuthenticated => _accessToken != null;
-
-  /// Stores the Azure/Microsoft app client ID.
-  static Future<void> saveCredentials(String clientId) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_clientIdKey, clientId);
-  }
-
-  /// Returns saved client ID, or null if not configured.
-  static Future<String?> getClientId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_clientIdKey);
-  }
-
-  /// Clears stored credentials and tokens.
-  static Future<void> clearCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_clientIdKey);
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_refreshTokenKey);
-  }
 
   @override
   Future<bool> authenticate() async {
@@ -71,16 +52,13 @@ class OneDriveProvider extends CloudStorageProvider {
         }
       }
 
-      final clientId = await getClientId();
-      if (clientId == null || clientId.isEmpty) return false;
-
       final redirectUri = 'http://localhost:$_redirectPort/callback';
 
       // Start local server
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, _redirectPort);
 
       final authUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', {
-        'client_id': clientId,
+        'client_id': _clientId,
         'response_type': 'code',
         'redirect_uri': redirectUri,
         'scope': _scopes,
@@ -116,7 +94,7 @@ class OneDriveProvider extends CloudStorageProvider {
         Uri.parse('https://login.microsoftonline.com/common/oauth2/v2.0/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
-          'client_id': clientId,
+          'client_id': _clientId,
           'code': authCode,
           'redirect_uri': redirectUri,
           'grant_type': 'authorization_code',
@@ -145,14 +123,11 @@ class OneDriveProvider extends CloudStorageProvider {
 
   Future<bool> _refreshTokenFlow(String refreshToken) async {
     try {
-      final clientId = await getClientId();
-      if (clientId == null) return false;
-
       final response = await http.post(
         Uri.parse('https://login.microsoftonline.com/common/oauth2/v2.0/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
-          'client_id': clientId,
+          'client_id': _clientId,
           'grant_type': 'refresh_token',
           'refresh_token': refreshToken,
           'scope': _scopes,

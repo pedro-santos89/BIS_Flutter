@@ -10,7 +10,8 @@ import 'cloud_storage_provider.dart';
 /// Uses OAuth2 PKCE flow for desktop (browser → localhost redirect).
 /// Stores files in /Apps/BIS_Backups/ in the user's Dropbox.
 class DropboxProvider extends CloudStorageProvider {
-  static const _appKeyKey = 'dropbox_app_key';
+  // EMBEDDED OAUTH CREDENTIALS (replace with your registered Dropbox app key)
+  static const String _appKey = 'YOUR_DROPBOX_APP_KEY';
   static const _tokenKey = 'dropbox_access_token';
   static const _refreshTokenKey = 'dropbox_refresh_token';
   static const _folderPath = '/BIS_Backups';
@@ -26,26 +27,6 @@ class DropboxProvider extends CloudStorageProvider {
 
   @override
   bool get isAuthenticated => _accessToken != null;
-
-  /// Stores the Dropbox app key for later use.
-  static Future<void> saveCredentials(String appKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_appKeyKey, appKey);
-  }
-
-  /// Returns saved app key, or null if not configured.
-  static Future<String?> getAppKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_appKeyKey);
-  }
-
-  /// Clears stored credentials and tokens.
-  static Future<void> clearCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_appKeyKey);
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_refreshTokenKey);
-  }
 
   @override
   Future<bool> authenticate() async {
@@ -70,15 +51,12 @@ class DropboxProvider extends CloudStorageProvider {
         }
       }
 
-      final appKey = await getAppKey();
-      if (appKey == null || appKey.isEmpty) return false;
-
       // Start local server to capture OAuth callback
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, _redirectPort);
       final redirectUri = 'http://localhost:$_redirectPort/callback';
 
       final authUrl = Uri.https('www.dropbox.com', '/oauth2/authorize', {
-        'client_id': appKey,
+        'client_id': _appKey,
         'response_type': 'code',
         'redirect_uri': redirectUri,
         'token_access_type': 'offline',
@@ -116,7 +94,7 @@ class DropboxProvider extends CloudStorageProvider {
         body: {
           'code': authCode,
           'grant_type': 'authorization_code',
-          'client_id': appKey,
+          'client_id': _appKey,
           'redirect_uri': redirectUri,
         },
       );
@@ -143,16 +121,13 @@ class DropboxProvider extends CloudStorageProvider {
 
   Future<bool> _refreshToken(String refreshToken) async {
     try {
-      final appKey = await getAppKey();
-      if (appKey == null) return false;
-
       final response = await http.post(
         Uri.parse('https://api.dropboxapi.com/oauth2/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'grant_type': 'refresh_token',
           'refresh_token': refreshToken,
-          'client_id': appKey,
+          'client_id': _appKey,
         },
       );
 
