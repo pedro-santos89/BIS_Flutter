@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,8 +11,8 @@ import 'cloud_storage_provider.dart';
 /// Uses OAuth2 authorization code flow for desktop.
 /// Stores files in a dedicated "BIS_Backups" folder in the user's OneDrive.
 class OneDriveProvider extends CloudStorageProvider {
-  // EMBEDDED OAUTH CREDENTIALS (replace with your registered Azure app client ID)
-  static const String _clientId = 'YOUR_ONEDRIVE_CLIENT_ID';
+  // OAuth credentials loaded from .env file
+  static String get _clientId => dotenv.env['ONEDRIVE_CLIENT_ID'] ?? '';
   static const _tokenKey = 'onedrive_access_token';
   static const _refreshTokenKey = 'onedrive_refresh_token';
   static const _folderName = 'BIS_Backups';

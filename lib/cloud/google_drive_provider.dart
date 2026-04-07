@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
@@ -11,9 +12,9 @@ import 'cloud_storage_provider.dart';
 /// Uses OAuth2 desktop flow (browser redirect → localhost callback).
 /// Stores files in a dedicated "BIS_Backups" folder in the user's Drive.
 class GoogleDriveProvider extends CloudStorageProvider {
-  // EMBEDDED OAUTH CREDENTIALS (replace with your app's credentials)
-  static const String _clientId = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
-  static const String _clientSecret = 'YOUR_GOOGLE_CLIENT_SECRET';
+  // OAuth credentials loaded from .env file
+  static String get _clientId => dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
+  static String get _clientSecret => dotenv.env['GOOGLE_CLIENT_SECRET'] ?? '';
   static const _tokensKey = 'google_drive_tokens';
   static const _folderName = 'BIS_Backups';
   static const _scopes = [drive.DriveApi.driveFileScope];

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,8 +11,8 @@ import 'cloud_storage_provider.dart';
 /// Uses OAuth2 PKCE flow for desktop (browser → localhost redirect).
 /// Stores files in /Apps/BIS_Backups/ in the user's Dropbox.
 class DropboxProvider extends CloudStorageProvider {
-  // EMBEDDED OAUTH CREDENTIALS (replace with your registered Dropbox app key)
-  static const String _appKey = 'YOUR_DROPBOX_APP_KEY';
+  // OAuth credentials loaded from .env file
+  static String get _appKey => dotenv.env['DROPBOX_APP_KEY'] ?? '';
   static const _tokenKey = 'dropbox_access_token';
   static const _refreshTokenKey = 'dropbox_refresh_token';
   static const _folderPath = '/BIS_Backups';

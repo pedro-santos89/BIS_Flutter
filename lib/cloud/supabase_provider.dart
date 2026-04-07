@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'cloud_storage_provider.dart';
 
@@ -6,9 +7,9 @@ import 'cloud_storage_provider.dart';
 /// Uses Supabase anonymous/email auth and stores files in a
 /// dedicated storage bucket.
 class SupabaseProvider extends CloudStorageProvider {
-  // EMBEDDED SUPABASE CREDENTIALS (replace with your project's values)
-  static const String _supabaseUrl = 'YOUR_SUPABASE_URL';
-  static const String _supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+  // Credentials loaded from .env file
+  static String get _supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
+  static String get _supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
   static const _bucketName = 'bis-backups';
   static const _folderPath = 'backups';
 

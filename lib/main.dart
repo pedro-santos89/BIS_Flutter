@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'theme.dart';
@@ -22,8 +23,11 @@ import 'screens/cloud_sync_screen.dart';
 /// Entry point for the BIS (BUS Information System) Flutter app.
 /// Initializes sqflite FFI for desktop platforms (Windows, Linux, macOS),
 /// sets up Provider-based state management, and launches the app.
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables from .env file
+  await dotenv.load(fileName: '.env');
 
   // Desktop platforms require FFI-based sqflite instead of the mobile plugin.
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
