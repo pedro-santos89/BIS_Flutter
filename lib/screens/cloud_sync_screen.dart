@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import '../cloud/cloud_storage_provider.dart';
 import '../cloud/google_drive_provider.dart';
 import '../cloud/dropbox_provider.dart';
@@ -10,6 +11,7 @@ import '../cloud/supabase_provider.dart';
 import '../cloud/sync_engine.dart';
 import '../l10n.dart';
 import 'cloud_file_browser_dialog.dart';
+import 'export_data_dialog.dart';
 
 /// Cloud sync & backup management screen.
 /// Allows configuring cloud providers, backing up/restoring the database,
@@ -150,20 +152,32 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     }
   }
 
-  Future<void> _uploadFile() async {
+  /// Allows user to upload one or more files from local computer to cloud storage.
+  /// First shows a folder picker dialog to select the destination cloud folder,
+  /// then shows a file picker to select local files (supports multiple selection),
+  /// and finally uploads all selected files to the chosen cloud folder.
+  Future<void> _uploadFiles() async {
     if (_currentProvider == null) return;
 
-    final result = await FilePicker.platform.pickFiles();
-    if (result == null || result.files.isEmpty) return;
+    // First, let the user pick a destination folder via the cloud browser
+    final selectedFolder = await CloudFileBrowserDialog.showFolderPicker(context, _currentProvider!);
+    if (selectedFolder == null) return;  // User cancelled
+    // selectedFolder is '' for root, or a folder ID string
 
-    final file = result.files.first;
-    if (file.path == null) return;
+    // Then pick local files (multiple selection enabled)
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (result == null || result.files.isEmpty || !mounted) return;
 
     await _runWithLoading(() async {
-      final bytes = await File(file.path!).readAsBytes();
-      await _currentProvider!.uploadFile(file.name, bytes);
-      _setStatus('Uploaded ${file.name}');
-      await _refreshFileList();
+      for (final file in result.files) {
+        if (file.path == null) continue;
+        final bytes = await File(file.path!).readAsBytes();
+        await _currentProvider!.uploadFileToFolder(
+          file.name, bytes, selectedFolder == '' ? null : selectedFolder,
+        );
+      }
+      final count = result.files.length;
+      _setStatus('Uploaded $count file${count > 1 ? 's' : ''} to selected folder');
     });
   }
 
@@ -270,51 +284,48 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
     });
   }
 
-  Future<void> _exportMembersCsv() async {
+  /// Shows a dialog for selecting which tables to export as CSV to cloud storage.
+  /// User can select Members, Daily Members, Custom Tables, or export all at once.
+  /// Each selected table is exported as a separate CSV file with timestamp in filename.
+  Future<void> _exportDataToCloud() async {
     if (_syncEngine == null) return;
+
+    // Show export selection dialog
+    final selections = await ExportDataDialog.show(context);
+    if (selections == null || selections.isEmpty || !mounted) return;
+
     await _runWithLoading(() async {
-      final name = await _syncEngine!.exportMembersCsvToCloud();
-      _setStatus('CSV exported: $name');
+      final count = await _syncEngine!.exportSelectedTablesToCloud(selections);
+      final l = AppLocalizations.of(context);
+      _setStatus('${l.tr('exportComplete')}: $count ${l.tr('files')}');
       await _refreshFileList();
     });
   }
 
-  Future<void> _exportDailyMembersCsv() async {
-    if (_syncEngine == null) return;
-    await _runWithLoading(() async {
-      final name = await _syncEngine!.exportDailyMembersCsvToCloud();
-      _setStatus('CSV exported: $name');
-      await _refreshFileList();
-    });
-  }
-
-  Future<void> _exportAllCsv() async {
-    if (_syncEngine == null) return;
-    await _runWithLoading(() async {
-      await _syncEngine!.exportAllCsvToCloud();
-      _setStatus(AppLocalizations.of(context).tr('csvExportComplete'));
-      await _refreshFileList();
-    });
-  }
-
+  /// Allows user to download multiple files from cloud storage to local computer.
+  /// Shows cloud file browser in multi-select mode with checkboxes,
+  /// then prompts for local download directory, and downloads all selected files.
   Future<void> _browseCloudStorage() async {
     if (_currentProvider == null) return;
 
-    final selectedFile = await CloudFileBrowserDialog.show(context, _currentProvider!);
-    if (selectedFile == null || !mounted) return;
+    final selectedFiles = await CloudFileBrowserDialog.showMultiSelect(context, _currentProvider!);
+    if (selectedFiles == null || selectedFiles.isEmpty || !mounted) return;
 
-    // Offer to download the selected file
+    // Let user pick a download directory
     final l = AppLocalizations.of(context);
-    final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: l.tr('downloadFile'),
-      fileName: selectedFile.name,
+    final outputDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: l.tr('selectDownloadFolder'),
     );
-    if (outputPath == null) return;
+    if (outputDir == null) return;
 
     await _runWithLoading(() async {
-      final data = await _currentProvider!.downloadFile(selectedFile.id);
-      await File(outputPath).writeAsBytes(data);
-      _setStatus('${l.tr('downloadFile')}: ${selectedFile.name}');
+      for (final file in selectedFiles) {
+        final data = await _currentProvider!.downloadFile(file.id);
+        final outputPath = p.join(outputDir, file.name);
+        await File(outputPath).writeAsBytes(data);
+      }
+      final count = selectedFiles.length;
+      _setStatus('Downloaded $count file${count > 1 ? 's' : ''} to $outputDir');
     });
   }
 
@@ -422,6 +433,11 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                         label: Text(l.tr('fullSync')),
                         onPressed: _loading ? null : _fullSync,
                       ),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.upload_file),
+                        label: Text(l.tr('uploadFiles')),
+                        onPressed: _loading ? null : _uploadFiles,
+                      ),
                       FilledButton.tonalIcon(
                         icon: const Icon(Icons.folder_open),
                         label: Text(l.tr('browseAndImport')),
@@ -432,20 +448,10 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                         label: Text(l.tr('browseCloudStorage')),
                         onPressed: _loading ? null : _browseCloudStorage,
                       ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.table_chart),
-                        label: Text(l.tr('exportMembersCsvCloud')),
-                        onPressed: _loading ? null : _exportMembersCsv,
-                      ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.calendar_month),
-                        label: Text(l.tr('exportDailyMembersCsvCloud')),
-                        onPressed: _loading ? null : _exportDailyMembersCsv,
-                      ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.file_download),
-                        label: Text(l.tr('exportAllCsvCloud')),
-                        onPressed: _loading ? null : _exportAllCsv,
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.cloud_upload),
+                        label: Text(l.tr('exportDataToCloud')),
+                        onPressed: _loading ? null : _exportDataToCloud,
                       ),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.logout),
@@ -466,11 +472,6 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                         icon: const Icon(Icons.refresh),
                         tooltip: l.tr('refresh'),
                         onPressed: _loading ? null : _refreshFileList,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.upload_file),
-                        tooltip: l.tr('uploadFile'),
-                        onPressed: _loading ? null : _uploadFile,
                       ),
                     ],
                   ),

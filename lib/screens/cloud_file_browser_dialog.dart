@@ -7,8 +7,15 @@ import '../l10n.dart';
 /// Returns the selected [CloudFileInfo] or null if cancelled.
 class CloudFileBrowserDialog extends StatefulWidget {
   final CloudStorageProvider provider;
+  final bool folderPickerMode;
+  final bool multiSelectMode;
 
-  const CloudFileBrowserDialog({super.key, required this.provider});
+  const CloudFileBrowserDialog({
+    super.key,
+    required this.provider,
+    this.folderPickerMode = false,
+    this.multiSelectMode = false,
+  });
 
   /// Shows the dialog and returns the selected file, or null.
   static Future<CloudFileInfo?> show(
@@ -21,14 +28,38 @@ class CloudFileBrowserDialog extends StatefulWidget {
     );
   }
 
+  /// Shows the dialog in multi-select mode and returns the selected files.
+  static Future<List<CloudFileInfo>?> showMultiSelect(
+    BuildContext context,
+    CloudStorageProvider provider,
+  ) {
+    return showDialog<List<CloudFileInfo>>(
+      context: context,
+      builder: (_) => CloudFileBrowserDialog(provider: provider, multiSelectMode: true),
+    );
+  }
+
+  /// Shows the dialog in folder-picker mode and returns the selected folder ID.
+  /// Returns '' for root, the folder ID string for a selected folder, or null if cancelled.
+  static Future<String?> showFolderPicker(
+    BuildContext context,
+    CloudStorageProvider provider,
+  ) {
+    return showDialog<String>(
+      context: context,
+      builder: (_) => CloudFileBrowserDialog(provider: provider, folderPickerMode: true),
+    );
+  }
+
   @override
   State<CloudFileBrowserDialog> createState() => _CloudFileBrowserDialogState();
 }
 
 class _CloudFileBrowserDialogState extends State<CloudFileBrowserDialog> {
-  List<CloudFileInfo> _items = [];
-  bool _loading = true;
-  String? _error;
+  List<CloudFileInfo> _items = []; // Files and folders in current directory
+  bool _loading = true; // Loading state while fetching cloud files
+  String? _error; // Error message if file listing fails
+  final Set<String> _selectedFileIds = {}; // Track selected file IDs in multi-select mode
 
   // Navigation stack: each entry is (folderId, folderName).
   // The first entry represents the root.
@@ -91,8 +122,26 @@ class _CloudFileBrowserDialogState extends State<CloudFileBrowserDialog> {
     _loadFolder(_currentFolderId);
   }
 
+  /// Handles file selection. In multi-select mode, toggles file in selection set.
+  /// In single-select mode, immediately returns the selected file and closes dialog.
   void _selectFile(CloudFileInfo file) {
-    Navigator.of(context).pop(file);
+    if (widget.multiSelectMode) {
+      setState(() {
+        if (_selectedFileIds.contains(file.id)) {
+          _selectedFileIds.remove(file.id);
+        } else {
+          _selectedFileIds.add(file.id);
+        }
+      });
+    } else {
+      Navigator.of(context).pop(file);
+    }
+  }
+
+  /// Confirms multi-selection and returns the list of selected files to caller.
+  void _confirmMultiSelection() {
+    final selectedFiles = _items.where((f) => _selectedFileIds.contains(f.id)).toList();
+    Navigator.of(context).pop(selectedFiles);
   }
 
   @override
@@ -227,13 +276,35 @@ class _CloudFileBrowserDialogState extends State<CloudFileBrowserDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${_items.where((i) => i.isFolder).length} ${l.tr('folders')}, '
-                    '${_items.where((i) => !i.isFolder).length} ${l.tr('files')}',
+                    widget.multiSelectMode && _selectedFileIds.isNotEmpty
+                        ? '${_selectedFileIds.length} ${l.tr('filesSelected')}'
+                        : '${_items.where((i) => i.isFolder).length} ${l.tr('folders')}, '
+                          '${_items.where((i) => !i.isFolder).length} ${l.tr('files')}',
                     style: theme.textTheme.bodySmall,
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(l.tr('cancel')),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.folderPickerMode)
+                        FilledButton.icon(
+                          icon: const Icon(Icons.check),
+                          label: Text(l.tr('selectThisFolder')),
+                          onPressed: () {
+                            Navigator.of(context).pop(_currentFolderId ?? '');
+                          },
+                        ),
+                      if (widget.multiSelectMode)
+                        FilledButton.icon(
+                          icon: const Icon(Icons.download),
+                          label: Text(l.tr('downloadSelected')),
+                          onPressed: _selectedFileIds.isEmpty ? null : _confirmMultiSelection,
+                        ),
+                      if (widget.folderPickerMode || widget.multiSelectMode) const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(l.tr('cancel')),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -282,14 +353,21 @@ class _CloudFileBrowserDialogState extends State<CloudFileBrowserDialog> {
         (!item.isFolder && item.sizeBytes != null) ? _formatSize(item.sizeBytes!) : '';
     final subtitle = [sizeStr, dateStr].where((s) => s.isNotEmpty).join(' • ');
 
+    final isSelected = widget.multiSelectMode && _selectedFileIds.contains(item.id);
+
     return ListTile(
-      leading: Icon(
-        item.isFolder ? Icons.folder : _fileIcon(item.name),
-        color: item.isFolder
-            ? Colors.amber.shade700
-            : theme.colorScheme.onSurfaceVariant,
-        size: 28,
-      ),
+      leading: widget.multiSelectMode && !item.isFolder
+          ? Checkbox(
+              value: isSelected,
+              onChanged: (_) => _selectFile(item),
+            )
+          : Icon(
+              item.isFolder ? Icons.folder : _fileIcon(item.name),
+              color: item.isFolder
+                  ? Colors.amber.shade700
+                  : theme.colorScheme.onSurfaceVariant,
+              size: 28,
+            ),
       title: Text(
         item.name,
         overflow: TextOverflow.ellipsis,
@@ -297,13 +375,19 @@ class _CloudFileBrowserDialogState extends State<CloudFileBrowserDialog> {
       subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
       trailing: item.isFolder
           ? const Icon(Icons.chevron_right)
-          : FilledButton.tonal(
-              onPressed: () => _selectFile(item),
-              child: Text(l.tr('select')),
-            ),
+          : widget.folderPickerMode
+              ? null  // Don't show select button for files in folder picker mode
+              : widget.multiSelectMode
+                  ? null  // No trailing button in multi-select, use checkbox instead
+                  : FilledButton.tonal(
+                      onPressed: () => _selectFile(item),
+                      child: Text(l.tr('select')),
+                    ),
       onTap: item.isFolder
           ? () => _navigateInto(item)
-          : () => _selectFile(item),
+          : widget.folderPickerMode
+              ? null
+              : () => _selectFile(item),
     );
   }
 

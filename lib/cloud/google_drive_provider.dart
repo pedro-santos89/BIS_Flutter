@@ -10,13 +10,13 @@ import 'cloud_storage_provider.dart';
 
 /// Google Drive implementation of [CloudStorageProvider].
 /// Uses OAuth2 desktop flow (browser redirect → localhost callback).
-/// Stores files in a dedicated "BIS_Backups" folder in the user's Drive.
+/// Stores files in a dedicated "BIS Files" folder in the user's Drive.
 class GoogleDriveProvider extends CloudStorageProvider {
   // OAuth credentials loaded from .env file
   static String get _clientId => dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
   static String get _clientSecret => dotenv.env['GOOGLE_CLIENT_SECRET'] ?? '';
   static const _tokensKey = 'google_drive_tokens';
-  static const _folderName = 'BIS_Backups';
+  static const _folderName = 'BIS Files';
   static const _scopes = [drive.DriveApi.driveFileScope];
 
   AutoRefreshingAuthClient? _authClient;
@@ -108,7 +108,7 @@ class GoogleDriveProvider extends CloudStorageProvider {
     await prefs.remove(_tokensKey);
   }
 
-  /// Ensures the BIS_Backups folder exists in Drive, creating it if needed.
+  /// Ensures the BIS Files folder exists in Drive, creating it if needed.
   Future<void> _ensureFolder() async {
     if (_authClient == null) return;
     final driveApi = drive.DriveApi(_authClient!);
@@ -185,6 +185,25 @@ class GoogleDriveProvider extends CloudStorageProvider {
     final file = drive.File()
       ..name = fileName
       ..parents = [_folderId ?? 'root'];
+
+    final media = drive.Media(
+      Stream.fromIterable([data]),
+      data.length,
+      contentType: mimeType ?? 'application/octet-stream',
+    );
+
+    final result = await driveApi.files.create(file, uploadMedia: media);
+    return result.id!;
+  }
+
+  @override
+  Future<String> uploadFileToFolder(String fileName, Uint8List data, String? folderId, {String? mimeType}) async {
+    if (_authClient == null) throw StateError('Not authenticated');
+    final driveApi = drive.DriveApi(_authClient!);
+
+    final file = drive.File()
+      ..name = fileName
+      ..parents = [folderId ?? 'root'];
 
     final media = drive.Media(
       Stream.fromIterable([data]),

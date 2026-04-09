@@ -14,7 +14,8 @@
 10. [Custom Tables](#custom-tables)
 11. [User Management](#user-management)
 12. [Export & Import](#export--import)
-13. [App Settings (Theme, Language, Text Size)](#app-settings)
+13. [Cloud Services, Backup and BIS Files Management](#cloud-services-backup-and-bis-files-management)
+14. [App Settings (Theme, Language, Text Size)](#app-settings)
 
 ---
 
@@ -235,6 +236,119 @@ Available from the Admin Dashboard.
 - Select a `.csv` file from disk.
 - Headers must match the expected format (same as the CSV export).
 - Existing records (matched by ID) are updated; new records are created.
+
+---
+
+## Cloud Services, Backup and BIS Files Management
+
+Navigate via Admin → **Cloud Services**.
+
+BIS supports cloud storage integration for backing up your database, syncing data across devices, and managing files remotely. Compatible providers include Google Drive, OneDrive, Dropbox, and Supabase Storage.
+
+### Setting Up a Cloud Provider
+
+1. **Select a Provider** from the "Cloud Providers" section:
+   - **Google Drive** — requires OAuth2 Client ID and Secret from Google Cloud Console
+   - **OneDrive** — requires Client ID from Azure App Portal
+   - **Dropbox** — requires App Key from Dropbox App Console
+   - **Supabase** — requires Project URL and Anon Key from Supabase Dashboard
+
+2. **Configure Credentials**:
+   - Click the **Configure** button for your chosen provider
+   - Enter the required credentials (stored securely in `.env` file)
+   - Click **Save**
+
+3. **Connect to Provider**:
+   - Click the **Connect** button
+   - A browser window opens for OAuth authentication
+   - Authorize BIS to access your cloud storage
+   - Upon success, status changes to "Connected"
+
+### BIS Files Folder
+
+All cloud operations use a dedicated folder named **"BIS Files"** (or **"bis-files"** for Supabase):
+- Automatically created on first connection
+- Contains database backups, CSV exports, and uploaded files
+- Subfolders can be created for better organization
+
+### Sync Actions
+
+Once connected, you can perform various data operations:
+
+#### 1. Full Sync
+- **Full Sync** — uploads a complete database backup to cloud and syncs bidirectionally
+- Creates a timestamped JSON file (e.g., `backup_20260409_1430.json`)
+- Merges cloud data with local data (does not delete existing records)
+
+#### 2. Backup Database
+- **Backup Database** — uploads current database as JSON to the "BIS Files" folder
+- Useful for creating manual backups before major changes
+
+#### 3. Import Data File from Cloud
+- **Import data file from cloud** — browse cloud storage to select a backup JSON file
+- Opens file browser showing contents of "BIS Files" folder
+- Click a `.json` file to import its data
+- Merges imported data with existing local records
+
+#### 4. Upload File(s)
+- **Upload File(s)** — upload files from your computer to cloud storage
+- First, select destination folder in cloud (or choose root/BIS Files)
+- Then, select one or more files from your local computer
+- Files are uploaded to the selected cloud folder
+- Useful for sharing documents, images, or other files related to your BUS operations
+
+#### 5. Download File(s)
+- **Download file(s)** — download multiple files from cloud to your computer
+- Opens file browser in multi-select mode with checkboxes
+- Navigate folders and select files to download
+- Click **Download Selected** button
+- Choose a local folder where files will be saved
+- All selected files are downloaded to the chosen directory
+
+#### 6. Export Data to Cloud
+- **Export Data to Cloud** — export database tables as CSV files to cloud storage
+- Opens a dialog to select which tables to export:
+  - **Export All Tables** — exports Members, Daily Members, and all Custom Tables
+  - **Members** — exports only the Members table
+  - **Daily Members** — exports only the Daily Members table
+  - **Custom Tables** — select individual custom tables to export
+- Each table is saved as a separate CSV file with timestamp
+- Files are uploaded to the "BIS Files" folder
+
+### Cloud Files List
+
+The bottom section displays files currently in your cloud "BIS Files" folder:
+
+- **File name**, **size**, and **modified date**
+- **Refresh** button to reload the file list
+- **Actions** per file:
+  - **Download** — save file to local computer
+  - **Delete** — remove file from cloud storage (requires confirmation)
+
+### Best Practices
+
+- **Regular Backups**: Use "Backup Database" before making major changes
+- **Multi-Device Sync**: Use "Full Sync" on each device to keep data synchronized
+- **Organize Files**: Create subfolders in cloud storage for different file types
+- **CSV Exports**: Export data periodically for external analysis or archival
+- **Account Switching**: OneDrive shows account picker for multi-account support
+
+### Troubleshooting
+
+**"Not authenticated" error**:
+- Click the **Connect** button again
+- Ensure browser popup windows are not blocked
+- Check that credentials are correctly configured
+
+**Files not showing**:
+- Click the **Refresh** button
+- Verify you're connected (check "Connected" status)
+- Ensure "BIS Files" folder exists in your cloud storage
+
+**Upload/Download failures**:
+- Check your internet connection
+- Verify cloud storage has available space
+- For large files, ensure stable connection during transfer
 
 ---
 

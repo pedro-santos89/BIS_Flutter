@@ -9,13 +9,13 @@ import 'cloud_storage_provider.dart';
 
 /// OneDrive (Microsoft Graph) implementation of [CloudStorageProvider].
 /// Uses OAuth2 authorization code flow for desktop.
-/// Stores files in a dedicated "BIS_Backups" folder in the user's OneDrive.
+/// Stores files in a dedicated "BIS Files" folder in the user's OneDrive.
 class OneDriveProvider extends CloudStorageProvider {
   // OAuth credentials loaded from .env file
   static String get _clientId => dotenv.env['ONEDRIVE_CLIENT_ID'] ?? '';
   static const _tokenKey = 'onedrive_access_token';
   static const _refreshTokenKey = 'onedrive_refresh_token';
-  static const _folderName = 'BIS_Backups';
+  static const _folderName = 'BIS Files';
   static const _redirectPort = 8543;
   static const _graphBase = 'https://graph.microsoft.com/v1.0';
   static const _scopes = 'Files.ReadWrite offline_access';
@@ -64,6 +64,7 @@ class OneDriveProvider extends CloudStorageProvider {
         'redirect_uri': redirectUri,
         'scope': _scopes,
         'response_mode': 'query',
+        'prompt': 'select_account',
       });
 
       if (await canLaunchUrl(authUrl)) {
@@ -103,7 +104,10 @@ class OneDriveProvider extends CloudStorageProvider {
         },
       );
 
-      if (tokenResponse.statusCode != 200) return false;
+      if (tokenResponse.statusCode != 200) {
+        print('OneDrive token exchange failed (${tokenResponse.statusCode}): ${tokenResponse.body}');
+        return false;
+      }
 
       final tokenData = jsonDecode(tokenResponse.body) as Map<String, dynamic>;
       _accessToken = tokenData['access_token'] as String;
@@ -117,6 +121,7 @@ class OneDriveProvider extends CloudStorageProvider {
       await _ensureFolder();
       return true;
     } catch (e) {
+      print('OneDrive authenticate error: $e');
       _accessToken = null;
       return false;
     }
@@ -259,6 +264,32 @@ class OneDriveProvider extends CloudStorageProvider {
 
     final result = jsonDecode(response.body) as Map<String, dynamic>;
     return result['id'] as String;
+  }
+
+  @override
+  Future<String> uploadFileToFolder(String fileName, Uint8List data, String? folderId, {String? mimeType}) async {
+    if (_accessToken == null) throw StateError('Not authenticated');
+
+    // folderId is a OneDrive item ID; null means root
+    final url = folderId != null
+        ? '$_graphBase/me/drive/items/$folderId:/$fileName:/content'
+        : '$_graphBase/me/drive/root:/$fileName:/content';
+
+    final response = await http.put(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $_accessToken',
+        'Content-Type': mimeType ?? 'application/octet-stream',
+      },
+      body: data,
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Upload failed: ${response.statusCode}');
+    }
+
+    final uploadResult = jsonDecode(response.body) as Map<String, dynamic>;
+    return uploadResult['id'] as String;
   }
 
   @override

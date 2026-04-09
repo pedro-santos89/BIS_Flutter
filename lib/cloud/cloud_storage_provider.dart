@@ -77,6 +77,10 @@ abstract class CloudStorageProvider {
   /// Uploads raw bytes as a file. Returns the cloud file ID.
   Future<String> uploadFile(String fileName, Uint8List data, {String? mimeType});
 
+  /// Uploads raw bytes to a specific folder. Returns the cloud file ID.
+  /// If [folderId] is null, uploads to the root of the cloud drive.
+  Future<String> uploadFileToFolder(String fileName, Uint8List data, String? folderId, {String? mimeType});
+
   /// Downloads a file by its cloud ID. Returns raw bytes.
   Future<Uint8List> downloadFile(String fileId);
 

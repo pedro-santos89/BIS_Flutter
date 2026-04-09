@@ -10,7 +10,7 @@ class SupabaseProvider extends CloudStorageProvider {
   // Credentials loaded from .env file
   static String get _supabaseUrl => dotenv.env['SUPABASE_URL'] ?? '';
   static String get _supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
-  static const _bucketName = 'bis-backups';
+  static const _bucketName = 'bis-files';
   static const _folderPath = 'backups';
 
   bool _initialized = false;
@@ -111,6 +111,22 @@ class SupabaseProvider extends CloudStorageProvider {
   @override
   Future<String> uploadFile(String fileName, Uint8List data, {String? mimeType}) async {
     final path = '$_folderPath/$fileName';
+    await _storage.from(_bucketName).uploadBinary(
+      path,
+      data,
+      fileOptions: FileOptions(
+        contentType: mimeType ?? 'application/octet-stream',
+        upsert: true,
+      ),
+    );
+    return path;
+  }
+
+  @override
+  Future<String> uploadFileToFolder(String fileName, Uint8List data, String? folderId, {String? mimeType}) async {
+    // folderId is a path prefix (e.g. 'some/folder') or null for bucket root
+    final folderPrefix = folderId ?? '';
+    final path = folderPrefix.isEmpty ? fileName : '$folderPrefix/$fileName';
     await _storage.from(_bucketName).uploadBinary(
       path,
       data,

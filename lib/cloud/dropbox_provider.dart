@@ -9,13 +9,13 @@ import 'cloud_storage_provider.dart';
 
 /// Dropbox implementation of [CloudStorageProvider].
 /// Uses OAuth2 PKCE flow for desktop (browser → localhost redirect).
-/// Stores files in /Apps/BIS_Backups/ in the user's Dropbox.
+/// Stores files in /Apps/BIS Files/ in the user's Dropbox.
 class DropboxProvider extends CloudStorageProvider {
   // OAuth credentials loaded from .env file
   static String get _appKey => dotenv.env['DROPBOX_APP_KEY'] ?? '';
   static const _tokenKey = 'dropbox_access_token';
   static const _refreshTokenKey = 'dropbox_refresh_token';
-  static const _folderPath = '/BIS_Backups';
+  static const _folderPath = '/BIS Files';
   static const _redirectPort = 8542;
 
   String? _accessToken;
@@ -272,6 +272,35 @@ class DropboxProvider extends CloudStorageProvider {
 
     final result = jsonDecode(response.body) as Map<String, dynamic>;
     return result['id'] as String;
+  }
+
+  @override
+  Future<String> uploadFileToFolder(String fileName, Uint8List data, String? folderId, {String? mimeType}) async {
+    if (_accessToken == null) throw StateError('Not authenticated');
+
+    // folderId is a Dropbox path (e.g. '/Documents') or null for root
+    final folderPath = folderId ?? '';
+    final response = await http.post(
+      Uri.parse('https://content.dropboxapi.com/2/files/upload'),
+      headers: {
+        'Authorization': 'Bearer $_accessToken',
+        'Content-Type': 'application/octet-stream',
+        'Dropbox-API-Arg': jsonEncode({
+          'path': '$folderPath/$fileName',
+          'mode': 'add',
+          'autorename': true,
+          'mute': false,
+        }),
+      },
+      body: data,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Upload failed: ${response.statusCode}');
+    }
+
+    final uploadResult = jsonDecode(response.body) as Map<String, dynamic>;
+    return uploadResult['id'] as String;
   }
 
   @override

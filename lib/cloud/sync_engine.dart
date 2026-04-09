@@ -377,5 +377,99 @@ class SyncEngine {
     await exportDailyMembersCsvToCloud();
   }
 
+  /// Exports a custom table as CSV and uploads to the connected cloud provider.
+  /// Generates CSV with header row containing column names, followed by data rows.
+  /// Filename format: tablename_YYYYMMDD_HHMM.csv (e.g., inventory_20260409_1430.csv)
+  /// Returns the cloud file ID of the uploaded CSV.
+  Future<String> exportCustomTableCsvToCloud(CustomTableDef tableDef) async {
+    if (!provider.isAuthenticated) {
+      throw StateError('Provider not authenticated');
+    }
+    final db = DatabaseHelper.instance;
+    final rows = await db.getAllCustomRows(tableDef.dbTableName);
+
+    // Build CSV: header row + data rows
+    final csvRows = <List<dynamic>>[];
+    
+    // Header row
+    final headers = ['ID', 'Created', ...tableDef.columns.map((c) => c.columnName)];
+    csvRows.add(headers);
+
+    // Data rows
+    for (final row in rows) {
+      final csvRow = <dynamic>[
+        row['id'],
+        _formatDate(DateTime.tryParse(row['created_at'] as String? ?? '')),
+      ];
+      for (final col in tableDef.columns) {
+        final value = row[col.columnName.toLowerCase().replaceAll(' ', '_')];
+        csvRow.add(_formatCellValue(value, col.columnType));
+      }
+      csvRows.add(csvRow);
+    }
+
+    final csvData = csv_lib.CsvEncoder().convert(csvRows);
+    final bytes = Uint8List.fromList(utf8.encode(csvData));
+    final now = DateTime.now();
+    final sanitizedName = tableDef.tableName.toLowerCase().replaceAll(' ', '_');
+    final fileName = '${sanitizedName}_${now.year}${_pad(now.month)}${_pad(now.day)}_${_pad(now.hour)}${_pad(now.minute)}.csv';
+    return await provider.uploadFile(fileName, bytes, mimeType: 'text/csv');
+  }
+
+  /// Exports selected tables based on ExportTarget list from ExportDataDialog.
+  /// Handles three export types: members, dailyMembers, customTable, and all.
+  /// If 'all' is selected, exports Members, Daily Members, and all Custom Tables.
+  /// Returns the number of CSV files successfully exported to cloud storage.
+  Future<int> exportSelectedTablesToCloud(List<dynamic> targets) async {
+    int count = 0;
+    final db = DatabaseHelper.instance;
+
+    for (final target in targets) {
+      // Check the export type
+      final type = target.type;
+      
+      if (type.toString() == 'ExportType.all') {
+        // Export all: members, daily members, and all custom tables
+        await exportMembersCsvToCloud();
+        count++;
+        await exportDailyMembersCsvToCloud();
+        count++;
+        
+        final customTables = await db.getCustomTables();
+        for (final table in customTables) {
+          await exportCustomTableCsvToCloud(table);
+          count++;
+        }
+        break; // No need to process other targets
+      } else if (type.toString() == 'ExportType.members') {
+        await exportMembersCsvToCloud();
+        count++;
+      } else if (type.toString() == 'ExportType.dailyMembers') {
+        await exportDailyMembersCsvToCloud();
+        count++;
+      } else if (type.toString() == 'ExportType.customTable') {
+        final customTable = target.customTable as CustomTableDef?;
+        if (customTable != null) {
+          await exportCustomTableCsvToCloud(customTable);
+          count++;
+        }
+      }
+    }
+
+    return count;
+  }
+
+  String _formatCellValue(dynamic value, String columnType) {
+    if (value == null) return '';
+    if (columnType == 'checkbox') {
+      return value == 1 || value == true ? 'True' : 'False';
+    }
+    if (columnType == 'date' || columnType == 'datetime') {
+      final date = DateTime.tryParse(value.toString());
+      return date != null ? _formatDate(date) : value.toString();
+    }
+    return value.toString();
+  }
+
   static String _pad(int n) => n.toString().padLeft(2, '0');
 }
