@@ -2,10 +2,27 @@
 
 ## Option A — Pre-built Installer (Recommended)
 
-1. Download `BIS-Setup.exe` from the [Releases](https://github.com/pedro-santos89/BIS_Flutter/releases) page.
-2. Run the installer and follow the wizard.
-3. The app will be installed to `C:\Program Files\BIS` by default.
-4. Launch **BIS** from the Start Menu or Desktop shortcut.
+### Using the Installer from Project
+
+If you have the project source code, the pre-built installer is located at:
+```
+build\BIS-Setup.exe
+```
+
+Simply run `BIS-Setup.exe` and follow the wizard.
+
+### Download from Releases
+
+Alternatively, download `BIS-Setup.exe` from the [Releases](https://github.com/pedro-santos89/BIS_Flutter/releases) page.
+
+### Installation Details
+
+- The app will be installed to `C:\Program Files\BIS` by default
+- Start Menu shortcuts are created automatically
+- Optional desktop shortcut can be selected during installation
+- Documentation files (README, Usage Manual, Install Guide) are accessible from Start Menu
+
+Launch **BIS** from the Start Menu or Desktop shortcut after installation.
 
 ---
 
@@ -72,6 +89,11 @@ flutter build windows --release
 The installer will be created at:
 ```
 build\BIS-Setup.exe
+```
+
+You can find the installer script at:
+```
+scripts\bis_windows_installer.iss
 ```
 
 ---
